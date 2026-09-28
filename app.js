@@ -9,10 +9,8 @@
 
   const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-  const pad = (n) => String(n).padStart(2, '0');
-  const toISO = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-  const parseISO = (s) => { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d); };
-  const addDays = (s, n) => { const d = parseISO(s); d.setDate(d.getDate() + n); return toISO(d); };
+  const Core = window.TrackerCore;
+  const { toISO, parseISO, addDays, daysBetween, recurringStatus, dueLabel, intervalLabel, collectDue, lastDone } = Core;
   const today = () => toISO(new Date());
   const weekStart = (s) => { const d = parseISO(s); d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); return toISO(d); };
   const fmtDate = (s, o) => parseISO(s).toLocaleDateString(undefined, o);
@@ -22,7 +20,8 @@
   const COLORS = ['blue', 'green', 'orange', 'purple', 'pink', 'yellow', 'red', 'brown', 'gray'];
   const EMOJI = ['✅', '📚', '📖', '🏃', '💪', '🏋️', '🚴', '🧘', '💧', '🍎', '🥗', '☕', '😴', '🌙', '☀️', '📝',
     '✍️', '🎯', '💰', '📈', '🎸', '🎨', '🎧', '🎬', '🌱', '🌿', '❤️', '🧠', '🙏', '💊', '🦷', '🧹',
-    '🏠', '✈️', '🗓️', '⭐', '🔥', '📵', '🚭', '🎮'];
+    '🏠', '✈️', '🗓️', '⭐', '🔥', '📵', '🚭', '🎮', '✂️', '💇', '👓', '🩺', '🚗', '🧺', '🧽', '🗑️',
+    '🪴', '🛏️', '🍳', '🐶', '📞', '💬', '👥', '👪', '🗣️', '🗂️', '📱', '🌍', '💼', '📷', '🎹', '🖌️'];
   const PROP_TYPES = {
     text: { label: 'Text', icon: 'Aa' },
     number: { label: 'Number', icon: '#' },
@@ -63,27 +62,88 @@
     };
   }
 
+  // Things you redo on a cadence: "last done" + "every N days/weeks/months" → next due.
+  function recurringTracker(name, icon, items, labels) {
+    return {
+      id: uid(), kind: 'recurring', name, icon,
+      labels: { done: 'Done', last: 'Last done', ...labels },
+      items: items.map(([iName, iIcon, every, unit]) => ({ id: uid(), name: iName, icon: iIcon, every, unit, history: [], notes: '' })),
+      view: {},
+    };
+  }
+
   const TEMPLATES = {
     habits: {
       name: 'Daily Habits', icon: '✅', desc: 'Check off habits each day, hit weekly goals and build streaks.',
       make: () => habitTracker('Daily Habits', '✅', [
         ['Drink 8 glasses of water', '💧', 'blue', 7],
-        ['Exercise', '🏃', 'green', 5],
-        ['Read 20 minutes', '📖', 'orange', 7],
-        ['Meditate', '🧘', 'purple', 7],
+        ['Work out', '🏃', 'green', 4],
+        ['Create for 30 minutes', '🎨', 'orange', 5],
+        ['Read 20 minutes', '📖', 'purple', 7],
         ['In bed by 11pm', '😴', 'pink', 7],
       ]),
     },
-    reading: {
-      name: 'Reading List', icon: '📚', desc: 'Books to read, in progress and finished — with ratings.',
-      make: (samples) => database('Reading List', '📚', [
-        prop('Title', 'text'), prop('Author', 'text'),
-        prop('Status', 'select', [opt('To read', 'gray'), opt('Reading', 'blue'), opt('Finished', 'green')]),
-        prop('Rating', 'rating'), prop('Finished on', 'date'),
-      ], samples ? [
-        { Title: 'Atomic Habits', Author: 'James Clear', Status: 'Reading' },
-        { Title: 'Deep Work', Author: 'Cal Newport', Status: 'To read' },
-      ] : []),
+    tasks: {
+      name: 'Tasks', icon: '☑️', desc: 'Work and personal to-dos with due dates. Due tasks show on Home and in your daily email.',
+      make: (samples) => {
+        const t = database('Tasks', '☑️', [
+          prop('Task', 'text'), prop('Due', 'date'),
+          prop('Priority', 'select', [opt('High', 'red'), opt('Medium', 'yellow'), opt('Low', 'gray')]),
+          prop('Area', 'select', [opt('Work', 'blue'), opt('Personal', 'green'), opt('Errands', 'orange')]),
+          prop('Done', 'checkbox'), prop('Notes', 'text'),
+        ], samples ? [{ Task: 'Try marking this task done →', Due: today(), Priority: 'Medium', Area: 'Personal' }] : []);
+        t.properties[1].remind = true;
+        t.view.hideDone = true;
+        t.view.sort = { prop: t.properties[1].id, dir: 'asc' };
+        return t;
+      },
+    },
+    chores: {
+      name: 'Chores', icon: '🧹', desc: 'See when you last did each chore and when it’s due again.',
+      make: () => recurringTracker('Chores', '🧹', [
+        ['Take out trash & recycling', '🗑️', 1, 'weeks'],
+        ['Laundry', '🧺', 1, 'weeks'],
+        ['Vacuum', '🧹', 1, 'weeks'],
+        ['Clean bathroom', '🧽', 2, 'weeks'],
+        ['Change bed sheets', '🛏️', 2, 'weeks'],
+        ['Water plants', '🪴', 4, 'days'],
+        ['Clean out fridge', '🍳', 1, 'months'],
+      ]),
+    },
+    upkeep: {
+      name: 'Haircuts & Appointments', icon: '💇', desc: 'Haircuts, dentist and other recurring appointments.',
+      make: () => recurringTracker('Haircuts & Appointments', '💇', [
+        ['Haircut', '✂️', 4, 'weeks'],
+        ['Dentist cleaning', '🦷', 6, 'months'],
+        ['Eye exam', '👓', 1, 'years'],
+        ['Doctor check-up', '🩺', 1, 'years'],
+        ['Car oil change', '🚗', 6, 'months'],
+      ], { done: 'Went', last: 'Last visit' }),
+    },
+    friends: {
+      name: 'Friends & Family', icon: '👥', desc: 'Keep in touch: see who you haven’t talked to in a while.',
+      make: () => recurringTracker('Friends & Family', '👥', [
+        ['Mom & Dad', '👪', 1, 'weeks'],
+        ['Best friend', '💬', 2, 'weeks'],
+        ['Old friends group chat', '👥', 1, 'months'],
+      ], { done: 'Checked in', last: 'Last talked' }),
+    },
+    language: {
+      name: 'Language Learning', icon: '🌍', desc: 'Daily practice habits for the language you’re learning.',
+      make: () => habitTracker('Language Learning', '🌍', [
+        ['App lesson (15 min)', '📱', 'green', 7],
+        ['Review flashcards', '🗂️', 'blue', 7],
+        ['Listen: podcast or show', '🎧', 'purple', 5],
+        ['Speak or write', '🗣️', 'orange', 3],
+      ]),
+    },
+    vocab: {
+      name: 'Vocabulary', icon: '🗂️', desc: 'New words and phrases, with how well you know them.',
+      make: () => database('Vocabulary', '🗂️', [
+        prop('Word / phrase', 'text'), prop('Meaning', 'text'),
+        prop('Status', 'select', [opt('New', 'gray'), opt('Learning', 'yellow'), opt('Known', 'green')]),
+        prop('Added', 'date'), prop('Example', 'text'),
+      ]),
     },
     workouts: {
       name: 'Workouts', icon: '💪', desc: 'Log each session: type, duration and how it felt.',
@@ -92,6 +152,31 @@
         prop('Type', 'select', [opt('Run', 'green'), opt('Strength', 'orange'), opt('Yoga', 'purple'), opt('Bike', 'blue'), opt('Walk', 'yellow')]),
         prop('Minutes', 'number'), prop('Effort', 'rating'), prop('Notes', 'text'),
       ], samples ? [{ Workout: 'Morning run', Date: today(), Type: 'Run', Minutes: 30, Effort: 3 }] : []),
+    },
+    creative: {
+      name: 'Creative Projects', icon: '🎨', desc: 'Your projects, their status, when you last worked on them and the next step.',
+      make: () => {
+        const t = database('Creative Projects', '🎨', [
+          prop('Project', 'text'),
+          prop('Medium', 'select', [opt('Writing', 'blue'), opt('Music', 'purple'), opt('Art', 'pink'), opt('Photo / Video', 'orange'), opt('Other', 'gray')]),
+          prop('Status', 'select', [opt('Idea', 'gray'), opt('In progress', 'blue'), opt('Paused', 'yellow'), opt('Done', 'green')]),
+          prop('Last worked on', 'date'), prop('Next step', 'text'), prop('Hours', 'number'),
+        ]);
+        t.view.mode = 'board';
+        t.view.groupBy = t.properties[2].id;
+        return t;
+      },
+    },
+    reading: {
+      name: 'Reading List', icon: '📚', desc: 'Books to read, in progress and finished, with ratings.',
+      make: (samples) => database('Reading List', '📚', [
+        prop('Title', 'text'), prop('Author', 'text'),
+        prop('Status', 'select', [opt('To read', 'gray'), opt('Reading', 'blue'), opt('Finished', 'green')]),
+        prop('Rating', 'rating'), prop('Finished on', 'date'),
+      ], samples ? [
+        { Title: 'Atomic Habits', Author: 'James Clear', Status: 'Reading' },
+        { Title: 'Deep Work', Author: 'Cal Newport', Status: 'To read' },
+      ] : []),
     },
     mood: {
       name: 'Mood Journal', icon: '🌙', desc: 'A daily check-in: mood, energy, sleep and a short note.',
@@ -110,17 +195,12 @@
         prop('Target date', 'date'), prop('Done', 'checkbox'),
       ]),
     },
-    finance: {
-      name: 'Spending', icon: '💰', desc: 'Track expenses by category and see the running total.',
-      make: () => database('Spending', '💰', [
-        prop('Item', 'text'), prop('Date', 'date'), prop('Amount', 'number'),
-        prop('Category', 'select', [opt('Groceries', 'green'), opt('Eating out', 'orange'), opt('Transport', 'blue'), opt('Bills', 'red'), opt('Fun', 'purple'), opt('Other', 'gray')]),
-        prop('Notes', 'text'),
-      ]),
-    },
+    blankRecurring: { name: 'Empty “every N days” list', icon: '🔁', desc: 'Anything you redo on a schedule and want reminders for.', make: () => recurringTracker('Recurring', '🔁', []) },
     blankHabits: { name: 'Empty habit tracker', icon: '🔥', desc: 'Start with no habits and add your own.', make: () => habitTracker('New habits', '🔥', []) },
     blank: { name: 'Empty database', icon: '📝', desc: 'A blank table. Add whatever columns you need.', make: () => database('Untitled', '📝', [prop('Name', 'text'), prop('Tags', 'select', []), prop('Date', 'date')]) },
   };
+
+  const DEFAULT_TRACKERS = ['habits', 'tasks', 'chores', 'workouts', 'language', 'creative', 'friends', 'upkeep'];
 
   // ---------------------------------------------------------------------------
   // State & persistence
@@ -128,14 +208,61 @@
   let storageOK = true;
   try { localStorage.setItem('trackers:test', '1'); localStorage.removeItem('trackers:test'); } catch (e) { storageOK = false; }
 
+  const browserTimeZone = () => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'; } catch (e) { return 'UTC'; } };
+
+  // Imported or synced data is untrusted: ids, colors, dates and numbers end up
+  // in HTML attributes, so coerce them to safe shapes.
+  const safeId = (id) => (typeof id === 'string' && /^[\w-]{1,64}$/.test(id) ? id : uid());
+  const safeColor = (c) => (COLORS.includes(c) ? c : 'gray');
+  const isISODate = (d) => typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d);
+  const clampInt = (n, lo, hi, dflt) => { const v = parseInt(n, 10); return Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : dflt; };
+
   function normalize(data) {
+    data.trackers = Array.isArray(data.trackers) ? data.trackers.filter((t) => t && typeof t === 'object') : [];
     for (const t of data.trackers) {
-      t.id = t.id || uid();
+      t.id = safeId(t.id);
       t.icon = t.icon || '📝';
       t.view = t.view || {};
-      if (t.kind === 'habit') { t.habits = t.habits || []; t.log = t.log || {}; t.view.mode = t.view.mode || 'week'; }
-      else { t.kind = 'database'; t.properties = t.properties || [prop('Name', 'text')]; t.rows = t.rows || []; t.view.mode = t.view.mode || 'table'; }
+      if (t.kind === 'habit') {
+        t.habits = Array.isArray(t.habits) ? t.habits : [];
+        for (const h of t.habits) { h.id = safeId(h.id); h.color = safeColor(h.color); h.target = clampInt(h.target, 1, 7, 7); }
+        t.log = t.log && typeof t.log === 'object' ? t.log : {};
+        t.view.mode = t.view.mode || 'week';
+      } else if (t.kind === 'recurring') {
+        t.items = Array.isArray(t.items) ? t.items : [];
+        t.labels = { done: 'Done', last: 'Last done', ...(t.labels || {}) };
+        for (const it of t.items) {
+          it.id = safeId(it.id);
+          it.history = Array.isArray(it.history) ? it.history.filter(isISODate) : [];
+          it.every = clampInt(it.every, 1, 365, 1);
+          it.unit = Core.UNITS[it.unit] ? it.unit : 'days';
+        }
+      } else {
+        t.kind = 'database';
+        t.properties = Array.isArray(t.properties) && t.properties.length ? t.properties : [prop('Name', 'text')];
+        for (const p of t.properties) {
+          p.id = safeId(p.id);
+          if (!PROP_TYPES[p.type]) p.type = 'text';
+          if (p.type === 'select') { p.options = Array.isArray(p.options) ? p.options : []; for (const o of p.options) { o.id = safeId(o.id); o.color = safeColor(o.color); } }
+        }
+        t.rows = Array.isArray(t.rows) ? t.rows : [];
+        for (const r of t.rows) {
+          r.id = safeId(r.id);
+          r.values = r.values && typeof r.values === 'object' ? r.values : {};
+          for (const p of t.properties) {
+            const v = r.values[p.id];
+            if (v == null) continue;
+            if ((p.type === 'number' && typeof v !== 'number') || (p.type === 'rating' && !(v >= 1 && v <= 5)) || (p.type === 'date' && !isISODate(v))) delete r.values[p.id];
+            else if (p.type === 'rating') r.values[p.id] = Math.round(v);
+          }
+        }
+        t.view.mode = t.view.mode || 'table';
+      }
     }
+    const s = (data.settings = data.settings || {});
+    s.digest = { enabled: true, ...(s.digest || {}) };
+    s.financeUrl = s.financeUrl || '';
+    s.timezone = browserTimeZone(); // the digest uses this to know what "today" is
     return data;
   }
 
@@ -144,12 +271,14 @@
       const raw = localStorage.getItem(STORAGE_KEY);
       if (raw) { const d = JSON.parse(raw); if (d && Array.isArray(d.trackers)) return normalize(d); }
     } catch (e) { /* fall through to defaults */ }
-    return { version: 1, trackers: [TEMPLATES.habits.make(), TEMPLATES.reading.make(true), TEMPLATES.workouts.make(true), TEMPLATES.goals.make()] };
+    return normalize({ version: 1, trackers: DEFAULT_TRACKERS.map((k) => TEMPLATES[k].make(true)) });
   }
 
   let state = load();
-  function save() {
+  const Cloud = window.Cloud || null;
+  function save(changed = true) {
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) { storageOK = false; }
+    if (changed && Cloud) Cloud.changed();
   }
 
   const ui = { page: 'home', weekOffset: 0 };
@@ -210,6 +339,7 @@
   function visibleRows(t) {
     const q = (t.view.query || '').trim().toLowerCase();
     let rows = t.rows;
+    if (t.view.hideDone) rows = rows.filter((r) => !Core.isRowDone(t, r));
     if (q) rows = rows.filter((r) => t.properties.some((p) => displayValue(p, r.values[p.id]).toLowerCase().includes(q)));
     const s = t.view.sort;
     const sp = s && t.properties.find((p) => p.id === s.prop);
@@ -268,7 +398,7 @@
   function commit(deferred) { save(); if (deferred) scheduleRender(); else render(); }
 
   // Stable identity for a focusable element, so focus survives a re-render.
-  const FOCUS_ATTRS = ['action', 'tracker', 'habit', 'date', 'row', 'prop', 'val', 'view', 'delta', 'template'];
+  const FOCUS_ATTRS = ['action', 'tracker', 'habit', 'item', 'date', 'row', 'prop', 'val', 'view', 'delta', 'template'];
   function focusKey(el) {
     if (!el || !el.dataset) return null;
     if (el.dataset.key) return el.dataset.key;
@@ -290,7 +420,7 @@
     const t = cur();
     if (!t) ui.page = 'home';
     renderSidebar();
-    pageEl.innerHTML = t ? (t.kind === 'habit' ? habitPage(t) : dbPage(t)) : homePage();
+    pageEl.innerHTML = !t ? homePage() : t.kind === 'habit' ? habitPage(t) : t.kind === 'recurring' ? recurringPage(t) : dbPage(t);
     mobileTitleEl.textContent = t ? `${t.icon} ${t.name || 'Untitled'}` : 'Home';
     document.title = t ? `${t.name || 'Untitled'} · My Trackers` : 'My Trackers';
     bannerEl.innerHTML = storageOK ? '' : '<div class="banner">⚠️ Browser storage is unavailable, so changes won’t be saved. Use Export to keep a copy.</div>';
@@ -319,12 +449,37 @@
             <span class="sb-icon">${esc(t.icon)}</span><span class="sb-label">${esc(t.name || 'Untitled')}</span>
           </a>`).join('')}
         <button class="sb-item sb-muted" data-action="new-tracker"><span class="sb-icon">＋</span><span class="sb-label">New tracker</span></button>
+        ${financeLink('sb-item')}
       </nav>
       <div class="sb-foot">
+        ${syncButton()}
+        <button class="sb-item sb-muted" data-action="settings"><span class="sb-icon">⚙️</span><span class="sb-label">Settings & reminders</span></button>
         <button class="sb-item sb-muted" data-action="export"><span class="sb-icon">⤓</span><span class="sb-label">Export backup</span></button>
         <button class="sb-item sb-muted" data-action="import"><span class="sb-icon">⤒</span><span class="sb-label">Import backup</span></button>
         <button class="sb-item sb-muted" data-action="theme"><span class="sb-icon">${effectiveTheme() === 'dark' ? '☀️' : '🌙'}</span><span class="sb-label">${effectiveTheme() === 'dark' ? 'Light mode' : 'Dark mode'}</span></button>
       </div>`;
+  }
+
+  function financeLink(cls) {
+    const href = safeUrl(state.settings.financeUrl);
+    if (!href) return '';
+    return `<div class="sb-section">Money</div>
+      <a class="${cls} sb-finance" href="${esc(href)}" target="_blank" rel="noopener noreferrer"><span class="sb-icon">💰</span><span class="sb-label">Finances (Actual) ↗</span></a>`;
+  }
+
+  const SYNC_LABELS = {
+    'signed-out': ['☁️', 'Sign in to sync'],
+    syncing: ['🔄', 'Syncing…'],
+    pending: ['🔄', 'Saving…'],
+    synced: ['✅', 'Synced'],
+    offline: ['📴', 'Offline: saved here'],
+    error: ['⚠️', 'Sync problem'],
+  };
+  function syncButton() {
+    if (!Cloud || !Cloud.enabled) return '';
+    const [icon, label] = SYNC_LABELS[Cloud.status] || SYNC_LABELS['signed-out'];
+    const title = Cloud.user ? `Signed in as ${Cloud.user.email}` : 'Sign in to sync across devices and get email reminders';
+    return `<button class="sb-item sb-muted sync-${esc(Cloud.status)}" data-action="account" title="${esc(title)}"><span class="sb-icon">${icon}</span><span class="sb-label">${label}</span></button>`;
   }
 
   function pageHead(t) {
@@ -356,6 +511,8 @@
           <p class="muted">${fmtDate(d, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}</p>
         </header>
 
+        ${dueCard()}
+
         <section class="card today">
           <div class="card-head">
             <h2>Today’s habits</h2>
@@ -378,6 +535,7 @@
           <h2 class="section-title">Your trackers</h2>
           <div class="tracker-grid">
             ${state.trackers.map(trackerCard).join('')}
+            ${safeUrl(state.settings.financeUrl) ? `<a class="tracker-card" href="${esc(state.settings.financeUrl)}" target="_blank" rel="noopener noreferrer"><span class="tc-icon">💰</span><span class="tc-name">Finances ↗</span><span class="muted">Opens Actual Budget</span></a>` : ''}
             <button class="tracker-card add" data-action="new-tracker">
               <span class="tc-icon">＋</span><span class="tc-name">New tracker</span><span class="muted">Start from a template</span>
             </button>
@@ -391,11 +549,132 @@
     if (t.kind === 'habit') {
       const best = Math.max(0, ...t.habits.map((h) => streak(t.log[h.id])));
       sub = plural(t.habits.length, 'habit', 'habits') + (best ? ` · 🔥 ${best}-day streak` : '');
+    } else if (t.kind === 'recurring') {
+      const due = t.items.filter((it) => { const st = recurringStatus(it, today()); return st.state === 'overdue' || st.state === 'today'; }).length;
+      sub = plural(t.items.length, 'item', 'items') + (due ? ` · <span class="due-count">${due} due</span>` : '');
     } else {
       sub = plural(t.rows.length, 'entry', 'entries');
     }
     return `<a class="tracker-card" href="#/t/${t.id}"><span class="tc-icon">${esc(t.icon)}</span><span class="tc-name">${esc(t.name || 'Untitled')}</span><span class="muted">${sub}</span></a>`;
   }
+
+  // ----- "Due" list on Home -----
+  const STATE_COLOR = { overdue: 'red', today: 'orange', soon: 'yellow', ok: 'green', never: 'gray' };
+  const stateOf = (days) => (days < 0 ? 'overdue' : days === 0 ? 'today' : days <= 2 ? 'soon' : 'ok');
+
+  function dueCard() {
+    const td = today();
+    const due = collectDue(state, td, 2);
+    const overdue = due.filter((d) => d.days < 0).length;
+    return `
+      <section class="card due-card">
+        <div class="card-head">
+          <h2>Due & coming up</h2>
+          <span class="muted">${due.length ? `${plural(due.length, 'item', 'items')}${overdue ? ` · <span class="due-count">${overdue} overdue</span>` : ''}` : ''}</span>
+        </div>
+        ${due.length ? `<ul class="due-list">${due.map((d) => `
+          <li class="due-row">
+            <span class="due-icon">${esc(d.icon)}</span>
+            <a class="due-main" href="#/t/${d.trackerId}"><span class="due-name">${esc(d.name)}</span><span class="muted due-src">${esc(d.tracker)}</span></a>
+            <span class="pill pill-${STATE_COLOR[stateOf(d.days)]}">${dueLabel(d.days)}</span>
+            ${d.kind === 'recurring'
+              ? `<button class="btn sm" data-action="mark-done" data-tracker="${d.trackerId}" data-item="${d.id}">${esc(findTracker(d.trackerId).labels.done)}</button>`
+              : `<button class="btn sm" data-action="complete-task" data-tracker="${d.trackerId}" data-row="${d.id}">✓ Complete</button>`}
+          </li>`).join('')}</ul>`
+          : '<p class="muted empty">Nothing due in the next couple of days. You’re on top of things 🎉</p>'}
+      </section>`;
+  }
+
+  // ----- Recurring tracker (chores, haircuts, friends...) -----
+  const relDays = (n) => (n === 0 ? 'today' : n === 1 ? 'yesterday' : `${n} days ago`);
+
+  function recurringPage(t) {
+    const td = today();
+    const all = t.items.map((it) => ({ it, st: recurringStatus(it, td) }));
+    const groups = [
+      ['Overdue', (x) => x.st.state === 'overdue'],
+      ['Due today', (x) => x.st.state === 'today'],
+      ['Coming up this week', (x) => x.st.state === 'soon' || (x.st.state === 'ok' && x.st.days <= 7)],
+      ['Later', (x) => x.st.state === 'ok' && x.st.days > 7],
+      ['Not logged yet', (x) => x.st.state === 'never'],
+    ];
+    const row = ({ it, st }) => {
+      const doneToday = st.last === td;
+      const meta = [intervalLabel(it.every, it.unit)];
+      if (st.last) meta.push(`${t.labels.last} ${fmtDate(st.last, { month: 'short', day: 'numeric' })} (${relDays(daysBetween(st.last, td))})`);
+      return `
+        <div class="rec-item c-${STATE_COLOR[st.state]}">
+          <span class="rec-icon">${esc(it.icon)}</span>
+          <div class="rec-main">
+            <button class="rec-name" data-action="edit-item" data-item="${it.id}" title="Edit, see history or log a past date">${esc(it.name)}</button>
+            <div class="rec-meta muted">${esc(meta.join(' · '))}</div>
+            ${st.last ? `<div class="rec-bar"><div style="width:${Math.round(st.progress * 100)}%"></div></div>` : ''}
+          </div>
+          <span class="pill pill-${STATE_COLOR[st.state]} rec-pill">${st.next ? dueLabel(st.days) : 'Not logged yet'}</span>
+          <button class="btn sm rec-done ${doneToday ? 'is-done' : ''}" data-action="mark-done" data-item="${it.id}" aria-pressed="${doneToday}" title="${doneToday ? 'Undo' : `Mark as ${esc(t.labels.done.toLowerCase())} today`}">
+            ${doneToday ? `✓ ${esc(t.labels.done)} today` : esc(t.labels.done)}
+          </button>
+        </div>`;
+    };
+    const body = groups.map(([title, test]) => {
+      const list = all.filter(test).sort((a, b) => (a.st.days ?? 1e9) - (b.st.days ?? 1e9) || a.it.name.localeCompare(b.it.name));
+      return list.length ? `<section class="rec-group"><h3 class="rec-group-title">${title} <span class="muted">${list.length}</span></h3>${list.map(row).join('')}</section>` : '';
+    }).join('');
+    return `
+      <div class="page">
+        ${pageHead(t)}
+        <p class="muted page-hint">Tap <b>${esc(t.labels.done)}</b> when you do something. The next due date is worked out from how often it repeats. Click a name to edit it or log an earlier date.</p>
+        ${body || '<p class="muted empty">Nothing here yet — add your first item below.</p>'}
+        <form class="add-inline add-recurring" data-form="add-item">
+          <input name="name" placeholder="Add something you repeat…" data-key="add-item" autocomplete="off" aria-label="Name" required>
+          <label class="every">every <input name="every" type="number" min="1" max="365" value="1" aria-label="How often"></label>
+          <select name="unit" aria-label="Unit">${Object.keys(Core.UNITS).map((u) => `<option value="${u}" ${u === 'weeks' ? 'selected' : ''}>${u}</option>`).join('')}</select>
+          <button class="btn">Add</button>
+        </form>
+      </div>`;
+  }
+
+  function historyList(t, it) {
+    const hist = [...it.history].sort().reverse();
+    if (!hist.length) return '<p class="muted">No history yet.</p>';
+    return `<ul class="history-list">${hist.map((d) => `<li><span>${fmtDate(d, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}</span><button type="button" class="icon-btn" data-action="remove-history" data-item="${it.id}" data-date="${d}" aria-label="Remove ${d}">✕</button></li>`).join('')}</ul>`;
+  }
+
+  function editItem(t, it) {
+    openModal({
+      title: `Edit “${it.name}”`,
+      submitLabel: 'Save',
+      footerExtra: `<button type="button" class="btn danger" data-action="delete-item" data-item="${it.id}">Delete</button>`,
+      body: `
+        <label class="field"><span>Name</span><input name="name" value="${esc(it.name)}" required autofocus autocomplete="off"></label>
+        <div class="field"><span>Repeats</span><div class="btn-row">
+          <input name="every" type="number" min="1" max="365" value="${it.every}" class="every-input" aria-label="Every">
+          <select name="unit" aria-label="Unit">${Object.keys(Core.UNITS).map((u) => `<option value="${u}" ${u === it.unit ? 'selected' : ''}>${u}</option>`).join('')}</select>
+        </div></div>
+        <label class="field"><span>Notes</span><textarea name="notes" rows="2" placeholder="Anything to remember: stylist’s name, what you talked about last time…">${esc(it.notes || '')}</textarea></label>
+        <div class="field"><span>History</span>
+          <div class="btn-row"><input type="date" class="log-date" max="${today()}" value="${today()}" aria-label="Date to log"><button type="button" class="btn sm" data-action="log-date" data-item="${it.id}">＋ Log this date</button></div>
+          <div class="history-wrap">${historyList(t, it)}</div>
+        </div>
+        <div class="field"><span>Icon</span>${emojiRadios('icon', it.icon)}</div>`,
+      onSubmit: (fd) => {
+        const name = String(fd.get('name') || '').trim();
+        if (!name) return false;
+        it.name = name;
+        it.every = Math.min(365, Math.max(1, parseInt(fd.get('every'), 10) || 1));
+        it.unit = Core.UNITS[fd.get('unit')] ? fd.get('unit') : 'days';
+        it.notes = String(fd.get('notes') || '');
+        it.icon = fd.get('icon') || it.icon;
+        return true;
+      },
+    });
+  }
+
+  function refreshHistory(t, it) {
+    const wrap = modal.querySelector('.history-wrap');
+    if (wrap) wrap.innerHTML = historyList(t, it);
+  }
+
 
   // ----- Habit tracker -----
   function habitPage(t) {
@@ -497,6 +776,7 @@
         <div class="toolbar">
           <div class="tabs" role="tablist">${tab('table', '▦ Table', mode)}${selects.length ? tab('board', '▥ Board', mode) : ''}</div>
           <div class="tools">
+            ${t.properties.some((p) => p.type === 'checkbox') ? `<button class="chip-toggle ${v.hideDone ? 'on' : ''}" data-action="toggle-hide-done" aria-pressed="${!!v.hideDone}">${v.hideDone ? '✓ ' : ''}Hide done</button>` : ''}
             ${sortP ? `<span class="chip">${esc(sortP.name)} ${v.sort.dir === 'desc' ? '↓' : '↑'}<button data-action="clear-sort" aria-label="Clear sort">✕</button></span>` : ''}
             <input type="search" class="search" placeholder="Search…" data-field="search" data-key="search-${t.id}" value="${esc(v.query || '')}" aria-label="Search entries">
             <button class="btn primary" data-action="add-row">＋ New</button>
@@ -665,6 +945,107 @@
     commit();
   });
 
+  function openSettings() {
+    const s = state.settings;
+    const cloudOn = Cloud && Cloud.enabled;
+    const email = cloudOn && Cloud.user ? Cloud.user.email : null;
+    openModal({
+      title: 'Settings & reminders',
+      submitLabel: 'Save',
+      body: `
+        <h3 class="modal-section">📧 Daily email</h3>
+        <label class="check-field"><input type="checkbox" name="digest" ${s.digest.enabled ? 'checked' : ''}>
+          <span>Email me each morning when chores, appointments, check-ins or tasks are overdue, due today or due tomorrow.</span></label>
+        <p class="muted small">${cloudOn
+          ? (email ? `Sent to <b>${esc(email)}</b>. Your time zone: ${esc(s.timezone)}.` : 'Sign in first. The email goes to the address you sign in with.')
+          : 'Needs the hosted version (Vercel + Supabase). See the README for setup.'}</p>
+        ${email ? '<button type="button" class="btn sm" data-action="send-test-email">Send a test email now</button>' : ''}
+
+        <h3 class="modal-section">💰 Finances</h3>
+        <label class="field"><span>Actual Budget address</span>
+          <input name="financeUrl" type="url" placeholder="https://my-budget.example.com" value="${esc(s.financeUrl)}" autocomplete="off"></label>
+        <p class="muted small">Adds a Finances link to the sidebar and Home that opens your self-hosted Actual Budget. See <code>docs/finances-actual-budget.md</code> for hosting it.</p>`,
+      onSubmit: (fd) => {
+        s.digest.enabled = fd.get('digest') === 'on';
+        const url = String(fd.get('financeUrl') || '').trim();
+        if (url && !safeUrl(url)) { alert('The Actual Budget address should start with https://'); return false; }
+        s.financeUrl = url;
+        return true;
+      },
+    });
+  }
+
+  function openAccount() {
+    if (!Cloud || !Cloud.enabled) return openSettings();
+    let sentTo = '';
+    let draftEmail = '';
+    openModal({
+      title: 'Account & sync',
+      live: true,
+      body: () => {
+        if (Cloud.user) {
+          const [icon, label] = SYNC_LABELS[Cloud.status] || ['', ''];
+          return `
+            <p>Signed in as <b>${esc(Cloud.user.email)}</b>.</p>
+            <p class="muted">${icon} ${label}${Cloud.error ? ` · ${esc(Cloud.error)}` : ''}</p>
+            <p class="muted small">Changes save to your account automatically, so every device you sign in on sees the same trackers.</p>
+            <div class="modal-foot"><button type="button" class="btn" data-action="sign-out">Sign out</button><span class="spacer"></span><button type="button" class="btn primary" data-action="close-modal">Done</button></div>`;
+        }
+        return `
+          <p>Sign in to sync your trackers between your phone and computer and get the daily reminder email.</p>
+          <div class="field"><span>Email</span><input type="email" class="acct-email" data-key="acct-email" placeholder="you@example.com" autocomplete="email" value="${esc(draftEmail || sentTo)}"></div>
+          <button type="button" class="btn primary" data-action="send-link">Email me a sign-in link</button>
+          ${sentTo ? `
+            <p class="muted small">Check your inbox for ${esc(sentTo)}. Open the link on this device, <b>or</b> type the 6-digit code from the email:</p>
+            <div class="btn-row"><input class="acct-code" data-key="acct-code" inputmode="numeric" autocomplete="one-time-code" maxlength="10" placeholder="123456" aria-label="Code">
+            <button type="button" class="btn" data-action="verify-code">Sign in with code</button></div>` : ''}`;
+      },
+    });
+    // Account actions need the typed email, so handle them here.
+    const onClick = async (e) => {
+      const b = e.target.closest('[data-action="send-link"], [data-action="verify-code"]');
+      if (!b) return;
+      const email = (modal.querySelector('.acct-email') || {}).value || sentTo;
+      try {
+        b.disabled = true;
+        if (b.dataset.action === 'send-link') {
+          if (!/^\S+@\S+\.\S+$/.test(email.trim())) throw new Error('Enter a valid email address.');
+          await Cloud.sendLink(email.trim());
+          sentTo = email.trim();
+        } else {
+          const code = ((modal.querySelector('.acct-code') || {}).value || '').trim();
+          if (!code) throw new Error('Enter the code from the email.');
+          await Cloud.verifyCode(sentTo, code);
+        }
+        drawModal();
+      } catch (err) {
+        alert(err.message || String(err));
+        b.disabled = false;
+      }
+    };
+    const onInput = (e) => { if (e.target.classList.contains('acct-email')) draftEmail = e.target.value; };
+    modal.addEventListener('click', onClick);
+    modal.addEventListener('input', onInput);
+    modal.addEventListener('close', () => { modal.removeEventListener('click', onClick); modal.removeEventListener('input', onInput); }, { once: true });
+  }
+
+  async function sendTestEmail(btn) {
+    btn.disabled = true;
+    btn.textContent = 'Sending…';
+    try {
+      const token = await Cloud.accessToken();
+      const r = await fetch('/api/digest?test=1', { headers: { Authorization: `Bearer ${token}` } });
+      const out = await r.json().catch(() => ({}));
+      if (!r.ok || (out.errors && out.errors.length)) throw new Error(out.error || (out.errors && out.errors[0] && out.errors[0].error) || `HTTP ${r.status}`);
+      btn.textContent = '✓ Sent! Check your inbox';
+    } catch (err) {
+      btn.textContent = 'Send a test email now';
+      btn.disabled = false;
+      alert(`Couldn’t send the test email: ${err.message}`);
+    }
+  }
+
+
   function templatePicker() {
     openModal({
       title: 'New tracker',
@@ -727,21 +1108,26 @@
           ${Object.entries(PROP_TYPES).map(([k, pt]) => `<option value="${k}" ${k === draft.type ? 'selected' : ''}>${pt.icon}  ${pt.label}</option>`).join('')}
         </select>${isTitle ? '<small class="muted">The first column is the entry title and stays as text.</small>' : ''}</label>
         <label class="field options-field" ${draft.type === 'select' ? '' : 'hidden'}><span>Options <small class="muted">(one per line)</small></span>
-          <textarea name="options" rows="5" placeholder="To do&#10;Doing&#10;Done">${esc(optionsText)}</textarea></label>`,
+          <textarea name="options" rows="5" placeholder="To do&#10;Doing&#10;Done">${esc(optionsText)}</textarea></label>
+        <label class="check-field remind-field" ${draft.type === 'date' ? '' : 'hidden'}><input type="checkbox" name="remind" ${draft.remind ? 'checked' : ''}>
+          <span>Remind me: show entries due on this date under <b>Due</b> on Home and in the daily email (until a checkbox on the entry is ticked)</span></label>`,
       onSubmit: (fd) => {
         const name = String(fd.get('name') || '').trim();
         if (!name) return false;
         const type = isTitle ? p.type : String(fd.get('type') || 'text');
+        const remind = type === 'date' && fd.get('remind') === 'on';
         const optNames = String(fd.get('options') || '').split('\n').map((s) => s.trim()).filter(Boolean);
         const buildOptions = (existing = []) => [...new Set(optNames)].map((n, i) => existing.find((o) => o.name === n) || opt(n, COLORS[i % COLORS.length]));
 
         if (isNew) {
           const np = prop(name, type);
           if (type === 'select') np.options = buildOptions();
+          if (remind) np.remind = true;
           t.properties.push(np);
           return true;
         }
         p.name = name;
+        if (type === 'date' && remind) p.remind = true; else delete p.remind;
         if (type !== p.type) {
           const from = { ...p, options: p.options ? [...p.options] : undefined };
           const to = { id: p.id, name, type };
@@ -752,6 +1138,7 @@
           }
           Object.keys(p).forEach((k) => delete p[k]);
           Object.assign(p, to);
+          if (remind) p.remind = true;
           if (t.view.sort && t.view.sort.prop === p.id) t.view.sort = null;
         } else if (type === 'select') {
           p.options = buildOptions(p.options);
@@ -1018,6 +1405,61 @@
         break;
       }
       case 'clear-sort': t.view.sort = null; commit(); break;
+      case 'toggle-hide-done': t.view.hideDone = !t.view.hideDone; commit(); break;
+      case 'settings': appEl.classList.remove('sb-open'); openSettings(); break;
+      case 'account': appEl.classList.remove('sb-open'); openAccount(); break;
+      case 'sign-out':
+        if (confirm('Sign out? Your trackers stay on this device, but stop syncing until you sign in again.')) {
+          Cloud.signOut().then(() => { closeModal(); render(); }, (err) => alert(err.message));
+        }
+        break;
+      case 'send-test-email': sendTestEmail(el); break;
+      case 'mark-done': {
+        const it = t && t.items && t.items.find((x) => x.id === el.dataset.item);
+        if (!it) break;
+        const td = today();
+        if (it.history.includes(td)) it.history = it.history.filter((d) => d !== td);
+        else it.history.push(td);
+        commit();
+        break;
+      }
+      case 'complete-task': {
+        const r = t && t.rows && t.rows.find((x) => x.id === el.dataset.row);
+        const cb = t && t.properties.find((p) => p.type === 'checkbox');
+        if (r && cb) { r.values[cb.id] = true; commit(); }
+        break;
+      }
+      case 'edit-item': {
+        const it = t.items.find((x) => x.id === el.dataset.item);
+        if (it) editItem(t, it);
+        break;
+      }
+      case 'log-date': {
+        const it = t.items.find((x) => x.id === el.dataset.item);
+        const input = modal.querySelector('.log-date');
+        const d = input && input.value;
+        if (!it || !d) break;
+        if (d > today()) { alert('That date is in the future.'); break; }
+        if (!it.history.includes(d)) it.history.push(d);
+        save(); render(); refreshHistory(t, it);
+        break;
+      }
+      case 'remove-history': {
+        const it = t.items.find((x) => x.id === el.dataset.item);
+        if (!it) break;
+        it.history = it.history.filter((d) => d !== el.dataset.date);
+        save(); render(); refreshHistory(t, it);
+        break;
+      }
+      case 'delete-item': {
+        const it = t.items.find((x) => x.id === el.dataset.item);
+        if (it && confirm(`Delete “${it.name}” and its history?`)) {
+          t.items = t.items.filter((x) => x !== it);
+          closeModal();
+          commit();
+        }
+        break;
+      }
       case 'group-menu': {
         const selects = t.properties.filter((p) => p.type === 'select');
         openMenu(el, selects.map((p) => ({ label: esc(p.name), value: p.id })), (v) => { t.view.groupBy = v; commit(); });
@@ -1061,11 +1503,24 @@
     else if (el.dataset.field === 'prop-type') {
       const f = el.form && el.form.querySelector('.options-field');
       if (f) f.hidden = el.value !== 'select';
+      const r = el.form && el.form.querySelector('.remind-field');
+      if (r) r.hidden = el.value !== 'date';
     }
   });
 
   document.addEventListener('submit', (e) => {
     const form = e.target;
+    if (form.dataset.form === 'add-item') {
+      e.preventDefault();
+      const t = cur();
+      const fd = new FormData(form);
+      const name = String(fd.get('name') || '').trim();
+      if (!t || !name) return;
+      t.items.push({ id: uid(), name, icon: t.icon, every: Math.max(1, parseInt(fd.get('every'), 10) || 1), unit: String(fd.get('unit') || 'weeks'), history: [], notes: '' });
+      form.reset();
+      commit();
+      return;
+    }
     if (form.dataset.form !== 'add-habit') return;
     e.preventDefault();
     const t = cur();
@@ -1114,6 +1569,20 @@
     if (document.visibilityState === 'visible' && today() !== lastDay) { lastDay = today(); render(); }
   });
 
-  save();
+  save(false);
   route();
+
+  if (Cloud) {
+    Cloud.init({
+      getState: () => state,
+      setState: (data) => {
+        if (!data || !Array.isArray(data.trackers)) return;
+        state = normalize(data);
+        save(false);
+        if (!cur()) ui.page = 'home';
+        render();
+      },
+      onStatus: () => { renderSidebar(); if (modalState && modalState.live) drawModal(); },
+    });
+  }
 })();

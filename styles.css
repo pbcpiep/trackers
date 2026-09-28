@@ -89,6 +89,7 @@
    Base
 --------------------------------------------------------------------------- */
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 html, body { margin: 0; }
 body {
   background: var(--bg);
@@ -476,4 +477,77 @@ dialog::backdrop { background: rgba(15, 15, 15, 0.45); }
 
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; }
+}
+
+/* ---------------------------------------------------------------------------
+   Due list (Home), recurring trackers, settings
+--------------------------------------------------------------------------- */
+.due-card { margin-bottom: 20px; }
+.due-count { color: var(--red); font-weight: 600; }
+.due-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.due-row {
+  display: flex; align-items: center; gap: 10px; padding: 8px 4px;
+  border-top: 1px solid var(--border);
+}
+.due-row:first-child { border-top: 0; }
+.due-icon { flex: none; width: 24px; text-align: center; font-size: 18px; }
+.due-main { flex: 1; min-width: 0; display: flex; flex-direction: column; text-decoration: none; }
+.due-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.due-src { font-size: 12.5px; }
+.due-main:hover .due-name { text-decoration: underline; text-underline-offset: 2px; }
+
+.page-hint { margin: -6px 0 18px; font-size: 14px; }
+.rec-group { margin-bottom: 22px; }
+.rec-group-title { font-size: 14px; font-weight: 600; margin-bottom: 6px; }
+.rec-item {
+  display: flex; align-items: center; gap: 12px; padding: 10px 12px; margin-bottom: 6px;
+  border: 1px solid var(--border); border-left: 3px solid var(--hc); border-radius: 8px; background: var(--card);
+}
+.rec-icon { flex: none; font-size: 22px; width: 28px; text-align: center; }
+.rec-main { flex: 1; min-width: 0; }
+.rec-name { font-weight: 500; text-align: left; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rec-name:hover { text-decoration: underline; text-underline-offset: 2px; }
+.rec-meta { font-size: 12.5px; }
+.rec-bar { height: 3px; border-radius: 2px; background: var(--empty-cell); overflow: hidden; margin-top: 6px; max-width: 280px; }
+.rec-bar > div { height: 100%; background: var(--hc); }
+.rec-pill { flex: none; }
+.rec-done { flex: none; min-width: 92px; justify-content: center; }
+.rec-done.is-done { background: var(--green-bg); color: var(--green-fg); border-color: transparent; }
+.add-recurring { max-width: 620px; flex-wrap: wrap; }
+.add-recurring .every { display: flex; align-items: center; gap: 6px; font-size: 14px; color: var(--muted); }
+.add-recurring .every input, .every-input { width: 64px; height: 34px; padding: 0 8px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg); }
+.add-recurring select, .modal-body .btn-row select { height: 34px; padding: 0 8px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg); }
+.history-wrap { max-height: 180px; overflow-y: auto; margin-top: 8px; }
+.history-list { list-style: none; margin: 0; padding: 0; }
+.history-list li { display: flex; align-items: center; justify-content: space-between; padding: 2px 4px; border-radius: 6px; font-size: 14px; }
+.history-list li:hover { background: var(--hover); }
+.log-date { height: 28px; padding: 0 8px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg); }
+
+.chip-toggle {
+  height: 28px; padding: 0 10px; border-radius: 14px; font-size: 13px;
+  border: 1px solid var(--border); color: var(--muted);
+}
+.chip-toggle:hover { background: var(--hover); }
+.chip-toggle.on { background: var(--green-bg); color: var(--green-fg); border-color: transparent; }
+
+.modal-section { font-size: 15px; margin: 18px 0 8px; }
+.modal-section:first-child { margin-top: 4px; }
+.check-field { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 10px; font-size: 14px; cursor: pointer; }
+.check-field input { margin-top: 3px; accent-color: var(--accent); }
+.small { font-size: 13px; }
+.acct-email, .acct-code { width: 100%; padding: 8px 10px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg); }
+.acct-code { width: 140px; letter-spacing: 2px; }
+.sync-error .sb-label, .sync-offline .sb-label { color: var(--danger); }
+code { font-size: 0.9em; padding: 1px 4px; border-radius: 4px; background: var(--hover); }
+
+@media (max-width: 760px) {
+  .rec-item { flex-wrap: wrap; }
+  .rec-main { flex-basis: calc(100% - 44px); }
+  .rec-pill { margin-left: 40px; }
+  .rec-done { margin-left: auto; }
+  .due-row { flex-wrap: wrap; }
+  .due-main { flex-basis: calc(100% - 40px); }
+  .due-row .pill { margin-left: 34px; }
+  .due-row .btn { margin-left: auto; }
+  .add-recurring input[name="name"] { flex-basis: 100%; }
 }
