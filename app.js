@@ -15,6 +15,29 @@
   const weekStart = (s) => { const d = parseISO(s); d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); return toISO(d); };
   const fmtDate = (s, o) => parseISO(s).toLocaleDateString(undefined, o);
   const safeUrl = (u) => (/^https?:\/\//i.test(u || '') ? u : null);
+  // Links that open a website or an app (e.g. duolingo://). Anything that could
+  // run script (javascript:, data:, ...) is refused; bare domains get https://.
+  function safeLink(u) {
+    const v = String(u || '').trim();
+    if (!v) return null;
+    if (/^(javascript|data|vbscript|file|blob|about):/i.test(v)) return null;
+    if (/^[a-z][a-z0-9+.-]*:/i.test(v)) return v;
+    if (/^[\w-]+(\.[\w-]+)+(\/\S*)?$/.test(v)) return `https://${v}`;
+    return null;
+  }
+  const phoneDigits = (p) => String(p || '').replace(/[^\d+]/g, '').replace(/(?!^)\+/g, '');
+  function contactLinks(it, compact) {
+    const num = phoneDigits(it.phone);
+    if (num.replace(/\D/g, '').length < 3) return '';
+    const msg = it.via === 'whatsapp' ? `https://wa.me/${num.replace(/\D/g, '')}` : `sms:${num}`;
+    const label = it.via === 'whatsapp' ? 'WhatsApp' : 'Message';
+    return `<a class="btn sm contact-btn" href="${esc(msg)}" ${it.via === 'whatsapp' ? 'target="_blank" rel="noopener noreferrer"' : ''} title="${label} ${esc(it.name)}">💬${compact ? '' : ` ${label}`}</a>`
+      + `<a class="btn sm contact-btn" href="tel:${esc(num)}" title="Call ${esc(it.name)}">📞${compact ? '' : ' Call'}</a>`;
+  }
+  const openLink = (url, label) => {
+    const href = safeLink(url);
+    return href ? `<a class="open-link" href="${esc(href)}" target="_blank" rel="noopener noreferrer" title="Open ${esc(label)}" aria-label="Open ${esc(label)}">↗</a>` : '';
+  };
   const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 
   const COLORS = ['blue', 'green', 'orange', 'purple', 'pink', 'yellow', 'red', 'brown', 'gray'];
@@ -56,7 +79,7 @@
   function habitTracker(name, icon, habits) {
     return {
       id: uid(), kind: 'habit', name, icon,
-      habits: habits.map(([hName, hIcon, color, target]) => ({ id: uid(), name: hName, icon: hIcon, color, target: target || 7 })),
+      habits: habits.map(([hName, hIcon, color, target, link]) => ({ id: uid(), name: hName, icon: hIcon, color, target: target || 7, link: link || '' })),
       log: {},
       view: { mode: 'week' },
     };
@@ -129,9 +152,9 @@
       ], { done: 'Checked in', last: 'Last talked' }),
     },
     language: {
-      name: 'Language Learning', icon: '🌍', desc: 'Daily practice habits for the language you’re learning.',
-      make: () => habitTracker('Language Learning', '🌍', [
-        ['App lesson (15 min)', '📱', 'green', 7],
+      name: 'Spanish', icon: '🇪🇸', desc: 'Daily practice habits for the language you’re learning, with a one-tap button to open your app.',
+      make: () => habitTracker('Spanish', '🇪🇸', [
+        ['Duolingo lesson (15 min)', '🦉', 'green', 7, 'https://www.duolingo.com/learn'],
         ['Review flashcards', '🗂️', 'blue', 7],
         ['Listen: podcast or show', '🎧', 'purple', 5],
         ['Speak or write', '🗣️', 'orange', 3],
@@ -164,6 +187,19 @@
         ]);
         t.view.mode = 'board';
         t.view.groupBy = t.properties[2].id;
+        return t;
+      },
+    },
+    shopping: {
+      name: 'Shopping List', icon: '🛒', desc: 'Things to buy. Tap 🛒 to jump to the item (or a search for it) on Amazon, Target, Walmart and more.',
+      make: () => {
+        const t = database('Shopping List', '🛒', [
+          prop('Item', 'text'),
+          prop('Store', 'select', [opt('Amazon', 'orange'), opt('Target', 'red'), opt('Walmart', 'blue'), opt('Costco', 'purple'), opt('Grocery', 'green'), opt('Other', 'gray')]),
+          prop('Link', 'url'), prop('Qty', 'number'), prop('Price', 'number'), prop('Bought', 'checkbox'),
+        ]);
+        t.shop = { store: t.properties[1].id, link: t.properties[2].id };
+        t.view.hideDone = true;
         return t;
       },
     },
@@ -200,7 +236,30 @@
     blank: { name: 'Empty database', icon: '📝', desc: 'A blank table. Add whatever columns you need.', make: () => database('Untitled', '📝', [prop('Name', 'text'), prop('Tags', 'select', []), prop('Date', 'date')]) },
   };
 
-  const DEFAULT_TRACKERS = ['habits', 'tasks', 'chores', 'workouts', 'language', 'creative', 'friends', 'upkeep'];
+  const DEFAULT_TRACKERS = ['habits', 'tasks', 'chores', 'shopping', 'workouts', 'language', 'creative', 'friends', 'upkeep'];
+
+  // Where the 🛒 button goes when an item has no link of its own.
+  const STORE_SEARCH = {
+    amazon: 'https://www.amazon.com/s?k=',
+    target: 'https://www.target.com/s?searchTerm=',
+    walmart: 'https://www.walmart.com/search?q=',
+    costco: 'https://www.costco.com/CatalogSearch?keyword=',
+    'best buy': 'https://www.bestbuy.com/site/searchpage.jsp?st=',
+    ebay: 'https://www.ebay.com/sch/i.html?_nkw=',
+    etsy: 'https://www.etsy.com/search?q=',
+    'home depot': 'https://www.homedepot.com/s/',
+  };
+  function shopHref(t, r) {
+    if (!t.shop) return null;
+    const direct = safeUrl(r.values[t.shop.link]);
+    if (direct) return direct;
+    const title = r.values[t.properties[0].id];
+    if (!title) return null;
+    const sp = t.properties.find((p) => p.id === t.shop.store);
+    const store = sp && (sp.options || []).find((o) => o.id === r.values[sp.id]);
+    const base = (store && STORE_SEARCH[store.name.trim().toLowerCase()]) || 'https://www.google.com/search?tbm=shop&q=';
+    return base + encodeURIComponent(String(title));
+  }
 
   // ---------------------------------------------------------------------------
   // State & persistence
@@ -527,7 +586,7 @@
               <span class="ti-icon">${esc(hb.icon)}</span>
               <span class="ti-name">${esc(hb.name)}</span>
               ${s ? `<span class="streak">🔥 ${s}</span>` : ''}
-            </button></li>`;
+            </button>${openLink(hb.link, hb.name)}</li>`;
           }).join('')}</ul>` : '<p class="muted empty">No habits yet. <button class="link" data-action="new-tracker">Create a habit tracker</button></p>'}
         </section>
 
@@ -577,6 +636,7 @@
             <span class="due-icon">${esc(d.icon)}</span>
             <a class="due-main" href="#/t/${d.trackerId}"><span class="due-name">${esc(d.name)}</span><span class="muted due-src">${esc(d.tracker)}</span></a>
             <span class="pill pill-${STATE_COLOR[stateOf(d.days)]}">${dueLabel(d.days)}</span>
+            ${d.kind === 'recurring' ? contactLinks(findTracker(d.trackerId).items.find((x) => x.id === d.id) || {}, true) : ''}
             ${d.kind === 'recurring'
               ? `<button class="btn sm" data-action="mark-done" data-tracker="${d.trackerId}" data-item="${d.id}">${esc(findTracker(d.trackerId).labels.done)}</button>`
               : `<button class="btn sm" data-action="complete-task" data-tracker="${d.trackerId}" data-row="${d.id}">✓ Complete</button>`}
@@ -611,6 +671,7 @@
             ${st.last ? `<div class="rec-bar"><div style="width:${Math.round(st.progress * 100)}%"></div></div>` : ''}
           </div>
           <span class="pill pill-${STATE_COLOR[st.state]} rec-pill">${st.next ? dueLabel(st.days) : 'Not logged yet'}</span>
+          ${contactLinks(it, true) ? `<span class="rec-contact">${contactLinks(it, true)}</span>` : ''}
           <button class="btn sm rec-done ${doneToday ? 'is-done' : ''}" data-action="mark-done" data-item="${it.id}" aria-pressed="${doneToday}" title="${doneToday ? 'Undo' : `Mark as ${esc(t.labels.done.toLowerCase())} today`}">
             ${doneToday ? `✓ ${esc(t.labels.done)} today` : esc(t.labels.done)}
           </button>
@@ -651,6 +712,13 @@
           <input name="every" type="number" min="1" max="365" value="${it.every}" class="every-input" aria-label="Every">
           <select name="unit" aria-label="Unit">${Object.keys(Core.UNITS).map((u) => `<option value="${u}" ${u === it.unit ? 'selected' : ''}>${u}</option>`).join('')}</select>
         </div></div>
+        <div class="field"><span>Phone number (adds Message and Call buttons, optional)</span>
+          <div class="btn-row">
+            <input name="phone" type="tel" value="${esc(it.phone || '')}" placeholder="+1 555 123 4567" autocomplete="off" class="phone-input">
+            ${'contacts' in navigator && 'ContactsManager' in window ? '<button type="button" class="btn sm" data-action="pick-contact">📇 Pick from contacts</button>' : ''}
+          </div>
+          <label class="check-field"><input type="checkbox" name="whatsapp" ${it.via === 'whatsapp' ? 'checked' : ''}><span>Message on WhatsApp instead of text <small class="muted">(include the country code, e.g. +1)</small></span></label>
+        </div>
         <label class="field"><span>Notes</span><textarea name="notes" rows="2" placeholder="Anything to remember: stylist’s name, what you talked about last time…">${esc(it.notes || '')}</textarea></label>
         <div class="field"><span>History</span>
           <div class="btn-row"><input type="date" class="log-date" max="${today()}" value="${today()}" aria-label="Date to log"><button type="button" class="btn sm" data-action="log-date" data-item="${it.id}">＋ Log this date</button></div>
@@ -665,6 +733,8 @@
         it.unit = Core.UNITS[fd.get('unit')] ? fd.get('unit') : 'days';
         it.notes = String(fd.get('notes') || '');
         it.icon = fd.get('icon') || it.icon;
+        it.phone = String(fd.get('phone') || '').trim().slice(0, 40);
+        it.via = fd.get('whatsapp') === 'on' ? 'whatsapp' : 'sms';
         return true;
       },
     });
@@ -725,7 +795,7 @@
             const target = Math.min(Math.max(h.target || 7, 1), 7);
             const s = streak(log);
             return `<tr>
-              <th scope="row" class="habit-name"><button class="hn-btn" data-action="edit-habit" data-habit="${h.id}" title="Edit habit"><span class="hn-icon">${esc(h.icon)}</span><span class="hn-text">${esc(h.name)}</span></button></th>
+              <th scope="row" class="habit-name"><button class="hn-btn" data-action="edit-habit" data-habit="${h.id}" title="Edit habit"><span class="hn-icon">${esc(h.icon)}</span><span class="hn-text">${esc(h.name)}</span></button>${openLink(h.link, h.name)}</th>
               ${days.map((d) => {
                 const on = !!log[d];
                 return `<td class="${d === td ? 'is-today' : ''}"><button class="check c-${h.color} ${on ? 'on' : ''}" data-action="toggle-habit" data-habit="${h.id}" data-date="${d}" aria-pressed="${on}" aria-label="${esc(h.name)}, ${fmtDate(d, { weekday: 'long', month: 'short', day: 'numeric' })}" ${d > td ? 'disabled' : ''}>${on ? '✓' : ''}</button></td>`;
@@ -842,7 +912,7 @@
           <tbody>
             ${rows.map((r) => `<tr>
               ${props.map((p, i) => `<td class="t-${p.type}">${i === 0
-                ? `<div class="title-cell">${cellEditor(r, p, 'c', true)}<button class="open-btn" tabindex="-1" data-action="open-row" data-row="${r.id}">Open</button></div>`
+                ? `<div class="title-cell">${cellEditor(r, p, 'c', true)}${shopHref(t, r) ? `<a class="shop-btn" href="${esc(shopHref(t, r))}" target="_blank" rel="noopener noreferrer" title="Shop for this" aria-label="Shop for this">🛒</a>` : ''}<button class="open-btn" tabindex="-1" data-action="open-row" data-row="${r.id}">Open</button></div>`
                 : cellEditor(r, p, 'c')}</td>`).join('')}
               <td class="row-actions"><button class="icon-btn" data-action="delete-row" data-row="${r.id}" aria-label="Delete entry" title="Delete entry">🗑</button></td>
             </tr>`).join('')}
@@ -1076,6 +1146,9 @@
       body: `
         <label class="field"><span>Name</span><input name="name" value="${esc(h.name)}" required autofocus autocomplete="off"></label>
         <label class="field"><span>Weekly goal (days per week)</span><input name="target" type="number" min="1" max="7" value="${h.target || 7}"></label>
+        <label class="field"><span>Link: opens an app or website with one tap (optional)</span>
+          <input name="link" value="${esc(h.link || '')}" placeholder="e.g. https://www.duolingo.com/learn" autocomplete="off" inputmode="url">
+          <small class="muted">Most apps open straight from their website link on your phone (Duolingo, Spotify, YouTube, Headspace…).</small></label>
         <div class="field"><span>Color</span>${colorRadios('color', h.color)}</div>
         <div class="field"><span>Icon</span>${emojiRadios('icon', h.icon)}</div>
         <div class="field"><span>Order</span><div class="btn-row">
@@ -1089,6 +1162,9 @@
         h.target = Math.min(7, Math.max(1, parseInt(fd.get('target'), 10) || 7));
         h.color = fd.get('color') || h.color;
         h.icon = fd.get('icon') || h.icon;
+        const link = String(fd.get('link') || '').trim();
+        if (link && !safeLink(link)) { alert('That link doesn’t look right. Try something like https://www.duolingo.com'); return false; }
+        h.link = link;
         return true;
       },
     });
@@ -1405,6 +1481,17 @@
         break;
       }
       case 'clear-sort': t.view.sort = null; commit(); break;
+      case 'pick-contact': {
+        navigator.contacts.select(['name', 'tel'], { multiple: false }).then((picked) => {
+          const c = picked && picked[0];
+          if (!c) return;
+          const phone = modal.querySelector('input[name="phone"]');
+          const name = modal.querySelector('input[name="name"]');
+          if (phone && c.tel && c.tel[0]) phone.value = c.tel[0];
+          if (name && c.name && c.name[0] && /^(best friend|friend|new item)?$/i.test(name.value.trim())) name.value = c.name[0];
+        }).catch(() => { /* user cancelled */ });
+        break;
+      }
       case 'toggle-hide-done': t.view.hideDone = !t.view.hideDone; commit(); break;
       case 'settings': appEl.classList.remove('sb-open'); openSettings(); break;
       case 'account': appEl.classList.remove('sb-open'); openAccount(); break;

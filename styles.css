@@ -551,3 +551,30 @@ code { font-size: 0.9em; padding: 1px 4px; border-radius: 4px; background: var(-
   .due-row .btn { margin-left: auto; }
   .add-recurring input[name="name"] { flex-basis: 100%; }
 }
+
+/* ---------------------------------------------------------------------------
+   Quick links: open an app, message a friend, shop for an item
+--------------------------------------------------------------------------- */
+.today-list li { display: flex; align-items: stretch; gap: 4px; }
+.today-list li .today-item { flex: 1; min-width: 0; }
+.open-link {
+  display: inline-grid; place-items: center; flex: none; min-width: 34px; padding: 0 8px;
+  border-radius: 8px; border: 1px solid var(--border); color: var(--accent);
+  text-decoration: none; font-weight: 600;
+}
+.open-link:hover { background: var(--hover); }
+.habit-name { white-space: nowrap; }
+.habit-name .hn-btn { display: inline-flex; vertical-align: middle; max-width: calc(100% - 40px); }
+.habit-name .open-link { height: 28px; vertical-align: middle; margin-left: 4px; }
+.contact-btn { text-decoration: none; color: var(--text); padding: 0 8px; }
+.rec-contact { display: inline-flex; gap: 4px; flex: none; }
+.due-row .contact-btn { flex: none; }
+.shop-btn {
+  flex: none; margin-right: 4px; padding: 2px 6px; border-radius: 4px; text-decoration: none; font-size: 14px;
+}
+.shop-btn:hover { background: var(--hover); }
+.phone-input { flex: 1; min-width: 0; padding: 8px 10px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg); }
+@media (max-width: 760px) {
+  .rec-contact { margin-left: auto; }
+  .rec-contact + .rec-done { margin-left: 0; }
+}
