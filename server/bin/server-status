@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+# One-screen health check for the home server:  server-status
+ACTUAL_DIR=/opt/actual
+BACKUP_DIR=/var/backups/actual
+CONFIG="${ACTUAL_BACKUP_CONFIG:-/etc/default/actual-backup}"
+[ -r "$CONFIG" ] && . "$CONFIG"
+ok()   { printf '  \033[32m✔\033[0m %s\n' "$*"; }
+warn() { printf '  \033[33m!\033[0m %s\n' "$*"; }
+bad()  { printf '  \033[31m✘\033[0m %s\n' "$*"; }
+
+echo "Home server status - $(date '+%a %b %d %H:%M')"
+echo "  Up $(uptime -p | sed 's/^up //')"
+
+# Actual
+state="$(docker inspect -f '{{.State.Status}}' actual 2>/dev/null || echo missing)"
+image="$(docker inspect -f '{{.Config.Image}}' actual 2>/dev/null | sed 's/.*://')"
+if [ "$state" = running ] && curl -fsS -o /dev/null --max-time 5 http://127.0.0.1:5006/; then ok "Actual Budget running (version ${image:-?})"
+else bad "Actual Budget is $state. Try: cd $ACTUAL_DIR && sudo docker compose up -d"; fi
+
+# Backups
+if [ -r "$BACKUP_DIR/last-success" ]; then
+  last="$(cat "$BACKUP_DIR/last-success")"
+  age_h=$(( ( $(date +%s) - $(date -d "$last" +%s) ) / 3600 ))
+  count="$(ls -1 "$BACKUP_DIR"/actual-*.tar.gz 2>/dev/null | wc -l)"
+  if [ "$age_h" -le 36 ]; then ok "Last backup ${age_h}h ago ($count kept)"; else warn "Last backup ${age_h}h ago. Check: systemctl status actual-backup"; fi
+else warn "No backup yet. Run: sudo actual-backup"; fi
+if [ -n "${EXTRA_BACKUP_DIR:-}" ] && [ ! -w "$EXTRA_BACKUP_DIR" ]; then warn "Second backup location $EXTRA_BACKUP_DIR is not available"; fi
+
+# Tailscale
+if command -v tailscale >/dev/null && tailscale status >/dev/null 2>&1; then
+  name="$(tailscale status --json 2>/dev/null | jq -r '.Self.DNSName // empty' | sed 's/\.$//')"
+  ok "Tailscale connected${name:+: https://$name}"
+else bad "Tailscale not connected. Run: sudo tailscale up"; fi
+
+# Disk
+use="$(df -P / | awk 'NR==2 {gsub(/%/,"",$5); print $5}')"
+if [ "$use" -lt 85 ]; then ok "Disk ${use}% used"; else warn "Disk ${use}% used. Free up space soon"; fi
+
+# Temperature
+t=0; for z in /sys/class/thermal/thermal_zone*/temp; do [ -r "$z" ] && v=$(cat "$z") && [ "$v" -gt "$t" ] && [ "$v" -lt 130000 ] && t=$v; done
+if [ "$t" -gt 0 ]; then t=$((t / 1000)); if [ "$t" -lt 80 ]; then ok "CPU ${t}°C"; else warn "CPU ${t}°C, running hot. Clean the vents"; fi; fi
+
+# Power
+for b in /sys/class/power_supply/BAT*; do
+  [ -d "$b" ] || continue
+  cap="$(cat "$b/capacity" 2>/dev/null)"; st="$(cat "$b/status" 2>/dev/null)"
+  if [ "$st" = Discharging ]; then warn "On battery (${cap}%): is the charger unplugged, or a power cut?"; else ok "Plugged in, battery ${cap}% ($st)"; fi
+done
+
+# Updates
+if [ -f /var/run/reboot-required ]; then warn "Updates need a reboot (automatic at 04:30, or: sudo reboot)"; else ok "No reboot pending"; fi

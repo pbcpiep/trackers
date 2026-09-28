@@ -1,0 +1,61 @@
+#!/usr/bin/env bash
+# Back up Actual Budget's data folder to a dated .tar.gz and keep the newest N.
+# Runs nightly via actual-backup.timer; run it by hand any time: sudo actual-backup
+# Settings (optional) live in /etc/default/actual-backup:
+#   KEEP=14                         # local backups to keep
+#   EXTRA_BACKUP_DIR=/mnt/backup    # second copy, e.g. an external/old drive
+#   EXTRA_KEEP=60
+set -euo pipefail
+
+ACTUAL_DIR=/opt/actual
+BACKUP_DIR=/var/backups/actual
+KEEP=14
+EXTRA_BACKUP_DIR=""
+EXTRA_KEEP=60
+CONFIG="${ACTUAL_BACKUP_CONFIG:-/etc/default/actual-backup}"
+[ -r "$CONFIG" ] && . "$CONFIG"
+
+COMPOSE=(docker compose -f "$ACTUAL_DIR/compose.yaml")
+mkdir -p "$BACKUP_DIR"
+chmod 755 "$BACKUP_DIR"   # files inside are 600 (root only)
+
+stamp="$(date +%F-%H%M%S)"
+out="$BACKUP_DIR/actual-$stamp.tar.gz"
+tmp="$out.partial"
+
+# Stop Actual for a few seconds so its database files are copied in a
+# consistent state, and always start it again, even if the backup fails.
+was_running=0
+if [ -n "$("${COMPOSE[@]}" ps --status running -q actual 2>/dev/null)" ]; then
+  was_running=1
+  "${COMPOSE[@]}" stop -t 20 actual >/dev/null
+fi
+restart() { [ "$was_running" = 1 ] && "${COMPOSE[@]}" start actual >/dev/null || true; }
+trap 'restart; rm -f "$tmp"' EXIT
+
+tar -C "$ACTUAL_DIR" -czf "$tmp" data
+restart
+was_running=0   # already restarted; don't do it twice on exit
+
+tar -tzf "$tmp" >/dev/null          # make sure the archive is readable
+mv "$tmp" "$out"
+chmod 600 "$out"
+
+prune() { # dir keep
+  { ls -1t "$1"/actual-*.tar.gz 2>/dev/null || true; } | tail -n +"$(( $2 + 1 ))" | while IFS= read -r f; do rm -f -- "$f"; done
+}
+prune "$BACKUP_DIR" "$KEEP"
+
+if [ -n "$EXTRA_BACKUP_DIR" ]; then
+  if [ -d "$EXTRA_BACKUP_DIR" ] && [ -w "$EXTRA_BACKUP_DIR" ]; then
+    cp -- "$out" "$EXTRA_BACKUP_DIR/"
+    prune "$EXTRA_BACKUP_DIR" "$EXTRA_KEEP"
+    echo "Copied to $EXTRA_BACKUP_DIR"
+  else
+    echo "WARNING: EXTRA_BACKUP_DIR $EXTRA_BACKUP_DIR is not available (drive unplugged?)" >&2
+  fi
+fi
+
+date -Is > "$BACKUP_DIR/last-success"
+chmod 644 "$BACKUP_DIR/last-success"
+echo "Backup OK: $out ($(du -h "$out" | cut -f1))"

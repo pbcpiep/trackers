@@ -1,0 +1,13 @@
+# Actual Budget server. Installed to /opt/actual by setup-ubuntu.sh.
+# Update with:  sudo actual-update 26.10.0   (takes a backup first)
+services:
+  actual:
+    image: docker.io/actualbudget/actual-server:26.9.0
+    container_name: actual
+    restart: unless-stopped
+    # Only reachable from this computer; Tailscale serves it to your devices
+    # over HTTPS. (Actual needs HTTPS in the browser anywhere but localhost.)
+    ports:
+      - "127.0.0.1:5006:5006"
+    volumes:
+      - ./data:/data

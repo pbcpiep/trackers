@@ -1,0 +1,10 @@
+[Unit]
+Description=Limit laptop battery charge for 24/7 plugged-in use
+
+[Service]
+Type=oneshot
+# LIMIT is filled in by setup-ubuntu.sh
+ExecStart=/bin/sh -c 'for f in /sys/class/power_supply/BAT*/charge_control_end_threshold; do [ -w "$f" ] && echo LIMIT > "$f"; done; true'
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# Restore Actual Budget from a backup made by actual-backup.
+#   sudo actual-restore                 # newest backup
+#   sudo actual-restore /path/to/actual-2026-10-01-033000.tar.gz
+# The current data is kept as data.before-restore-<date>, so this is undoable.
+set -euo pipefail
+ACTUAL_DIR=/opt/actual
+BACKUP_DIR=/var/backups/actual
+CONFIG="${ACTUAL_BACKUP_CONFIG:-/etc/default/actual-backup}"
+[ -r "$CONFIG" ] && . "$CONFIG"
+[ "$(id -u)" = 0 ] || [ -n "${ACTUAL_BACKUP_CONFIG:-}" ] || { echo "Run with sudo: sudo actual-restore" >&2; exit 1; }
+
+file="${1:-$(ls -1t "$BACKUP_DIR"/actual-*.tar.gz 2>/dev/null | head -1 || true)}"
+[ -n "$file" ] && [ -f "$file" ] || { echo "No backup found. Usage: sudo actual-restore [backup.tar.gz]" >&2; exit 1; }
+tar -tzf "$file" >/dev/null || { echo "That backup file is damaged." >&2; exit 1; }
+
+echo "Restore Actual Budget from:"
+echo "  $file"
+read -r -p "This replaces the current budget data (a copy is kept). Continue? [y/N] " ans
+[ "$ans" = y ] || [ "$ans" = Y ] || { echo "Cancelled."; exit 0; }
+
+cd "$ACTUAL_DIR"
+docker compose -f compose.yaml stop actual >/dev/null
+keep="data.before-restore-$(date +%F-%H%M%S)"
+[ -d data ] && mv data "$keep"
+tar -xzf "$file" -C "$ACTUAL_DIR"
+docker compose -f compose.yaml start actual >/dev/null
+echo "Restored. Previous data kept in $ACTUAL_DIR/$keep"
