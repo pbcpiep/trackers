@@ -127,6 +127,8 @@ Finances live in [Actual Budget](https://actualbudget.org), an open-source, priv
 
 Once it's running, paste its address into **Settings & reminders → Finances**, and a 💰 Finances link appears in the sidebar and on Home.
 
+**Thinking of using an old computer as the server?** Run the checker in [`tools/server-check/`](tools/server-check/README.md) on it first. It tells you whether the machine is fit to run 24/7 and what to fix.
+
 ---
 
 ## Development
