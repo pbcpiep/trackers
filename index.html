@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>My Trackers</title>
+  <meta name="description" content="Personal habit and life trackers — habits, reading, workouts, mood and goals.">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>✅</text></svg>">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app" id="app">
+    <aside class="sidebar" id="sidebar" aria-label="Navigation"></aside>
+    <div class="scrim" data-action="close-sidebar"></div>
+    <main class="main">
+      <div class="mobile-bar">
+        <button class="icon-btn" data-action="open-sidebar" aria-label="Open menu">☰</button>
+        <span id="mobile-title"></span>
+      </div>
+      <div id="banner"></div>
+      <div id="page"></div>
+    </main>
+  </div>
+  <dialog id="modal"></dialog>
+  <input type="file" id="import-file" accept="application/json,.json" hidden>
+  <script src="app.js"></script>
+</body>
+</html>
