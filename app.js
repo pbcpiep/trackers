@@ -152,11 +152,11 @@
       ], { done: 'Checked in', last: 'Last talked' }),
     },
     language: {
-      name: 'Spanish', icon: '🇪🇸', desc: 'Daily practice habits for the language you’re learning, with a one-tap button to open your app.',
+      name: 'Spanish', icon: '🇪🇸', desc: 'Daily Language Transfer lessons and practice habits, with a one-tap button to open the app.',
       make: () => habitTracker('Spanish', '🇪🇸', [
-        ['Duolingo lesson (15 min)', '🦉', 'green', 7, 'https://www.duolingo.com/learn'],
+        ['Language Transfer lesson', '🎧', 'green', 7, 'https://www.languagetransfer.org/'],
         ['Review flashcards', '🗂️', 'blue', 7],
-        ['Listen: podcast or show', '🎧', 'purple', 5],
+        ['Watch or listen to something in Spanish', '📺', 'purple', 5],
         ['Speak or write', '🗣️', 'orange', 3],
       ]),
     },
@@ -195,7 +195,7 @@
       make: () => {
         const t = database('Shopping List', '🛒', [
           prop('Item', 'text'),
-          prop('Store', 'select', [opt('Amazon', 'orange'), opt('Target', 'red'), opt('Walmart', 'blue'), opt('Costco', 'purple'), opt('Grocery', 'green'), opt('Other', 'gray')]),
+          prop('Store', 'select', [opt('Amazon', 'orange'), opt('Best Buy', 'blue'), opt('Target', 'red'), opt('Walmart', 'yellow'), opt('Costco', 'purple'), opt('Grocery', 'green'), opt('Other', 'gray')]),
           prop('Link', 'url'), prop('Qty', 'number'), prop('Price', 'number'), prop('Bought', 'checkbox'),
         ]);
         t.shop = { store: t.properties[1].id, link: t.properties[2].id };
@@ -245,21 +245,79 @@
     walmart: 'https://www.walmart.com/search?q=',
     costco: 'https://www.costco.com/CatalogSearch?keyword=',
     'best buy': 'https://www.bestbuy.com/site/searchpage.jsp?st=',
+    bestbuy: 'https://www.bestbuy.com/site/searchpage.jsp?st=',
     ebay: 'https://www.ebay.com/sch/i.html?_nkw=',
     etsy: 'https://www.etsy.com/search?q=',
     'home depot': 'https://www.homedepot.com/s/',
   };
-  function shopHref(t, r) {
-    if (!t.shop) return null;
-    const direct = safeUrl(r.values[t.shop.link]);
-    if (direct) return direct;
-    const title = r.values[t.properties[0].id];
-    if (!title) return null;
-    const sp = t.properties.find((p) => p.id === t.shop.store);
-    const store = sp && (sp.options || []).find((o) => o.id === r.values[sp.id]);
-    const base = (store && STORE_SEARCH[store.name.trim().toLowerCase()]) || 'https://www.google.com/search?tbm=shop&q=';
-    return base + encodeURIComponent(String(title));
+  const SHOP_DOMAINS = [
+    [/(^|\.)amazon\./, 'Amazon'], [/(^|\.)bestbuy\./, 'Best Buy'], [/(^|\.)target\./, 'Target'],
+    [/(^|\.)walmart\./, 'Walmart'], [/(^|\.)costco\./, 'Costco'], [/(^|\.)ebay\./, 'eBay'],
+    [/(^|\.)etsy\./, 'Etsy'], [/(^|\.)homedepot\./, 'Home Depot'],
+  ];
+
+  /** A readable product name from a store URL's slug, e.g. amazon.com/Sony-WH-1000XM5-Headphones/dp/B09... */
+  function nameFromUrl(u) {
+    try {
+      const url = new URL(u);
+      const parts = url.pathname.split('/').filter(Boolean).map((x) => { try { return decodeURIComponent(x); } catch (e) { return x; } });
+      const slug = parts
+        .filter((x) => /[a-z][^/]*-[^/]*[a-z]/i.test(x) && !/^(dp|gp|site|ip|p|product|products|itm)$/i.test(x))
+        .sort((a, b) => b.length - a.length)[0];
+      if (!slug) return url.hostname.replace(/^www\./, '');
+      const words = slug.replace(/\.[a-z]{1,4}$/i, '').replace(/[-_+]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 80);
+      return words.charAt(0).toUpperCase() + words.slice(1);
+    } catch (e) {
+      return u;
+    }
   }
+
+  /** Item pasted as a link: keep the link, name the item from it and pick the store. */
+  function applyShopLink(t, r, url) {
+    r.values[t.shop.link] = url;
+    r.values[t.properties[0].id] = nameFromUrl(url);
+    let host = '';
+    try { host = new URL(url).hostname.toLowerCase(); } catch (e) { return; }
+    const hit = SHOP_DOMAINS.find(([re]) => re.test(host));
+    const sp = t.properties.find((p) => p.id === t.shop.store);
+    if (!hit || !sp) return;
+    let o = sp.options.find((x) => x.name.toLowerCase() === hit[1].toLowerCase());
+    if (!o) { o = opt(hit[1], COLORS[sp.options.length % COLORS.length]); sp.options.push(o); }
+    r.values[sp.id] = o.id;
+  }
+
+  function storeSearchUrl(storeName, query) {
+    const base = STORE_SEARCH[String(storeName).trim().toLowerCase()];
+    return base ? base + encodeURIComponent(query) : null;
+  }
+
+  function openShopMenu(anchor, t, r) {
+    const q = String(r.values[t.properties[0].id] || '').trim();
+    const link = safeUrl(r.values[t.shop.link]);
+    const sp = t.properties.find((p) => p.id === t.shop.store);
+    const mine = sp && sp.options.find((o) => o.id === r.values[sp.id]);
+    // Your stores (from the Store column), the item's own store first, then the usual big ones.
+    const names = [];
+    const add = (n) => { if (n && storeSearchUrl(n, 'x') && !names.some((x) => x.toLowerCase() === n.toLowerCase())) names.push(n); };
+    if (mine) add(mine.name);
+    ['Amazon', 'Best Buy'].forEach(add);
+    (sp ? sp.options : []).forEach((o) => add(o.name));
+    ['Walmart', 'Target', 'eBay'].forEach(add);
+    const item = (href, label) => `<a class="menu-item" role="menuitem" data-pick="1" href="${esc(href)}" target="_blank" rel="noopener noreferrer">${label}</a>`;
+    let html = `<div class="menu-head">${esc(q || 'This item')}</div>`;
+    if (link) {
+      let host = '';
+      try { host = new URL(link).hostname.replace(/^www\./, ''); } catch (e) { /* ignore */ }
+      html += item(link, `🔗 Open saved link <span class="muted">${esc(host)}</span>`) + '<div class="menu-sep"></div>';
+    }
+    if (q) {
+      html += names.map((n) => item(storeSearchUrl(n, q), `🔎 Search ${esc(n)}`)).join('');
+      html += '<div class="menu-sep"></div>' + item(`https://www.google.com/search?tbm=shop&q=${encodeURIComponent(q)}`, '🛍️ Compare prices everywhere');
+    }
+    openPopover(anchor, html, () => {}, 'menu shop-pop');
+  }
+
+
 
   // ---------------------------------------------------------------------------
   // State & persistence
@@ -902,7 +960,11 @@
 
   function dbTable(t, rows) {
     const props = t.properties;
-    return `
+    return `${t.shop ? `
+      <form class="add-inline shop-add" data-form="add-shop">
+        <input name="q" placeholder="Add an item, or paste a link from any store…" data-key="add-shop" autocomplete="off" aria-label="Item or link">
+        <button class="btn primary">Add</button>
+      </form>` : ''}
       <div class="table-wrap">
         <table class="db">
           <thead><tr>
@@ -912,7 +974,7 @@
           <tbody>
             ${rows.map((r) => `<tr>
               ${props.map((p, i) => `<td class="t-${p.type}">${i === 0
-                ? `<div class="title-cell">${cellEditor(r, p, 'c', true)}${shopHref(t, r) ? `<a class="shop-btn" href="${esc(shopHref(t, r))}" target="_blank" rel="noopener noreferrer" title="Shop for this" aria-label="Shop for this">🛒</a>` : ''}<button class="open-btn" tabindex="-1" data-action="open-row" data-row="${r.id}">Open</button></div>`
+                ? `<div class="title-cell">${cellEditor(r, p, 'c', true)}${t.shop && (r.values[p.id] || r.values[t.shop.link]) ? `<button class="shop-btn" data-action="shop" data-row="${r.id}" title="Shop for this" aria-label="Shop for this">🛒</button>` : ''}<button class="open-btn" tabindex="-1" data-action="open-row" data-row="${r.id}">Open</button></div>`
                 : cellEditor(r, p, 'c')}</td>`).join('')}
               <td class="row-actions"><button class="icon-btn" data-action="delete-row" data-row="${r.id}" aria-label="Delete entry" title="Delete entry">🗑</button></td>
             </tr>`).join('')}
@@ -1147,8 +1209,10 @@
         <label class="field"><span>Name</span><input name="name" value="${esc(h.name)}" required autofocus autocomplete="off"></label>
         <label class="field"><span>Weekly goal (days per week)</span><input name="target" type="number" min="1" max="7" value="${h.target || 7}"></label>
         <label class="field"><span>Link: opens an app or website with one tap (optional)</span>
-          <input name="link" value="${esc(h.link || '')}" placeholder="e.g. https://www.duolingo.com/learn" autocomplete="off" inputmode="url">
-          <small class="muted">Most apps open straight from their website link on your phone (Duolingo, Spotify, YouTube, Headspace…).</small></label>
+          <input name="link" value="${esc(h.link || '')}" placeholder="e.g. https://www.languagetransfer.org/" autocomplete="off" inputmode="url">
+          <small class="muted">Many apps open straight from their website link on your phone. If yours opens the website instead, use an iPhone Shortcut:</small>
+          <span><button type="button" class="btn sm" data-action="shortcut-link">📱 Open the app with an iPhone Shortcut</button></span>
+          <small class="muted shortcut-help" hidden></small></label>
         <div class="field"><span>Color</span>${colorRadios('color', h.color)}</div>
         <div class="field"><span>Icon</span>${emojiRadios('icon', h.icon)}</div>
         <div class="field"><span>Order</span><div class="btn-row">
@@ -1481,6 +1545,23 @@
         break;
       }
       case 'clear-sort': t.view.sort = null; commit(); break;
+      case 'shortcut-link': {
+        const nameInput = modal.querySelector('input[name="name"]');
+        const guess = /language transfer/i.test(nameInput ? nameInput.value : '') ? 'Language Transfer' : (nameInput ? nameInput.value.replace(/\(.*?\)/g, '').trim() : 'My app');
+        const appName = (prompt('What is the app called on your phone?', guess) || '').trim();
+        if (!appName) break;
+        const shortcut = `Open ${appName}`;
+        modal.querySelector('input[name="link"]').value = `shortcuts://run-shortcut?name=${encodeURIComponent(shortcut)}`;
+        const help = modal.querySelector('.shortcut-help');
+        help.hidden = false;
+        help.innerHTML = `One-time setup on your iPhone: open the <b>Shortcuts</b> app → <b>＋</b> → <b>Add Action</b> → search <b>Open App</b> → choose <b>${esc(appName)}</b>. Name the shortcut exactly <b>${esc(shortcut)}</b>. Then tap Save here.`;
+        break;
+      }
+      case 'shop': {
+        const r = t.rows.find((x) => x.id === el.dataset.row);
+        if (r) openShopMenu(el, t, r);
+        break;
+      }
       case 'pick-contact': {
         navigator.contacts.select(['name', 'tel'], { multiple: false }).then((picked) => {
           const c = picked && picked[0];
@@ -1575,6 +1656,7 @@
       else if (p.type === 'number') v = el.value === '' ? null : Number(el.value);
       else v = el.value.trim() === '' ? null : el.value;
       if (v == null || v === false) delete r.values[p.id]; else r.values[p.id] = v;
+      if (t.shop && p === t.properties[0] && typeof v === 'string' && safeUrl(v.trim())) applyShopLink(t, r, v.trim());
       commit(true);
     } else if (el.dataset.field === 'tracker-name' && t) {
       t.name = el.value.trim();
@@ -1597,6 +1679,17 @@
 
   document.addEventListener('submit', (e) => {
     const form = e.target;
+    if (form.dataset.form === 'add-shop') {
+      e.preventDefault();
+      const t = cur();
+      const q = String(new FormData(form).get('q') || '').trim();
+      if (!t || !q) return;
+      const r = addRow(t);
+      if (safeUrl(q)) applyShopLink(t, r, q); else r.values[t.properties[0].id] = q;
+      form.reset();
+      commit();
+      return;
+    }
     if (form.dataset.form === 'add-item') {
       e.preventDefault();
       const t = cur();

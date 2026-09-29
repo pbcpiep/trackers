@@ -578,3 +578,8 @@ code { font-size: 0.9em; padding: 1px 4px; border-radius: 4px; background: var(-
   .rec-contact { margin-left: auto; }
   .rec-contact + .rec-done { margin-left: 0; }
 }
+a.menu-item { color: inherit; text-decoration: none; }
+.menu-head { padding: 6px 10px 4px; font-size: 12px; font-weight: 600; color: var(--muted); max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.shop-pop { min-width: 240px; }
+.shop-add { max-width: none; margin: 0 0 12px; }
+.shortcut-help { line-height: 1.45; }

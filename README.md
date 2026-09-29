@@ -28,9 +28,9 @@ It also links out to a self-hosted **Actual Budget** for finances.
 | ✅ Daily Habits | Habit | Check off each day, weekly goals, 🔥 streaks, 20-week heatmap |
 | ☑️ Tasks | Table | Work & personal to-dos with **Due** dates, priorities, and a “Hide done” filter |
 | 🧹 Chores | Every N days | **Last done → next due**, shown as overdue / due today / coming up |
-| 🛒 Shopping List | Table | Items by store. Tap 🛒 to open the item's link, or search for it on Amazon, Target, Walmart, Costco and more |
+| 🛒 Shopping List | Table | One list for every store. Type a keyword or paste a product link (the name and store fill in automatically). 🛒 opens the saved link, searches Amazon, Best Buy and other stores, or compares prices everywhere |
 | 💪 Workouts | Table | Type, minutes, effort and notes for each session |
-| 🇪🇸 Spanish | Habit | Daily Duolingo lesson, flashcards, listening and speaking. Tap ↗ to open the app in one tap |
+| 🇪🇸 Spanish | Habit | Daily Language Transfer lesson, flashcards, listening and speaking. Tap ↗ to open it in one tap |
 | 🎨 Creative Projects | Board | Projects by status: idea → in progress → done, with the next step |
 | 👥 Friends & Family | Every N days | Who you haven't talked to in a while. Add a phone number to get 💬 Message (text or WhatsApp) and 📞 Call buttons |
 | 💇 Haircuts & Appointments | Every N days | Haircut every 4 weeks, dentist every 6 months, and so on |
@@ -45,7 +45,7 @@ The **New tracker** menu has more templates: Vocabulary, Reading List, Mood Jour
 **How to use it:**
 - **Every-N-days trackers** (chores, friends, haircuts): tap **Done** when you do the thing, and the next due date is calculated for you. Click an item's name to change how often it repeats, add notes, or log an earlier date.
 - **Tables:** edit cells inline, switch to the **Board** view, sort, search, and add columns (text, number, select, checkbox, date, rating, URL).
-- **One-tap links:** give any habit a link (edit the habit, then *Link*) and a ↗ button appears on Home and in the week view. Most phone apps open straight from their website link.
+- **One-tap links:** give any habit a link (edit the habit, then *Link*) and a ↗ button appears on Home and in the week view. Many apps open straight from their website link. If yours doesn't, tap **Open the app with an iPhone Shortcut**: it walks you through making a one-action Shortcut that opens the app itself.
 - **Friends:** when adding a phone number, Android (Chrome) offers **Pick from contacts**. On iPhone, web apps can't read your contacts, so paste the number in.
 - **Reminder dates:** open a date column's menu, choose **Edit property**, and tick **Remind me**. Rows then show up under *Due* and in the daily email until one of their checkboxes is ticked. The Tasks **Due** column has this on already.
 - **Settings & reminders:** turn the daily email on or off, send yourself a test email, and set the address of your Actual Budget.
