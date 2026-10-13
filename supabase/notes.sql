@@ -44,7 +44,8 @@ begin
   on conflict (user_id) do update set key_hash = excluded.key_hash, created_at = now();
 end;
 $$;
-revoke all on function public.set_notes_key(text) from public;
+-- Supabase grants new functions to anon/authenticated by default, so revoke explicitly.
+revoke all on function public.set_notes_key(text) from public, anon, authenticated;
 grant execute on function public.set_notes_key(text) to authenticated;
 
 -- Called by the iPhone Shortcut. Replaces everything stored for that folder.
@@ -110,5 +111,6 @@ begin
   return v_count;
 end;
 $$;
-revoke all on function public.import_notes(text, text, jsonb) from public;
+-- Supabase grants new functions to anon/authenticated by default, so revoke explicitly.
+revoke all on function public.import_notes(text, text, jsonb) from public, anon, authenticated;
 grant execute on function public.import_notes(text, text, jsonb) to anon;

@@ -57,6 +57,7 @@ begin
 end;
 $$;
 
-revoke all on function public.digest_rows(text) from public;
+-- Supabase grants new functions to anon/authenticated by default, so revoke explicitly.
+revoke all on function public.digest_rows(text) from public, anon, authenticated;
 -- Only the server (anon key + secret) calls this; signed-in app users don't need it.
 grant execute on function public.digest_rows(text) to anon;
