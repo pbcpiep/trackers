@@ -1,5 +1,7 @@
 # Deploy runbook (for an agent or a person)
 
+> **Progress (2026-10-13):** Supabase is done: project `ffxlnfpamjzydtwiyrss`, schema applied, digest secret stored. A send-only Resend key was created. **Vercel is not done yet:** the Vercel connector had read-only access to the owner's account, so creating the project (step 2) is still pending.
+
 This runbook takes the app from "code in GitHub" to live on Vercel, with Supabase sync and the daily email. It can be done by clicking through the dashboards (see the README, "Hosting it on Vercel") or entirely through APIs, as below.
 
 The API calls are written from the providers' public docs. **Check each against the current docs if a call is rejected**, since these APIs change.
@@ -29,14 +31,19 @@ REF=$(curl -s "${H[@]}" -X POST https://api.supabase.com/v1/projects \
 until [ "$(curl -s "${H[@]}" https://api.supabase.com/v1/projects/$REF | jq -r .status)" = ACTIVE_HEALTHY ]; do sleep 10; done
 # schema
 jq -Rs '{query: .}' supabase/schema.sql | curl -s "${H[@]}" -X POST https://api.supabase.com/v1/projects/$REF/database/query -d @-
-# keys (publishable/anon + secret/service_role)
+# publishable key (the secret/service_role key is not needed)
 curl -s "${H[@]}" "https://api.supabase.com/v1/projects/$REF/api-keys?reveal=true"
 ```
 
-Record the following (do not print the secret key in logs that the owner sees):
+Record:
 - `SUPABASE_URL=https://$REF.supabase.co`
 - `SUPABASE_PUBLISHABLE_KEY`: the publishable key, or the legacy `anon` key
-- `SUPABASE_SECRET_KEY`: a secret key, or the legacy `service_role` key
+
+Then store the digest secret in the database. Its value must equal Vercel's `CRON_SECRET`:
+```sql
+insert into private.app_secrets (name, value) values ('digest', encode(extensions.gen_random_bytes(32), 'hex'))
+on conflict (name) do update set value = excluded.value returning value;
+```
 
 ## 2. Vercel project, env vars and deploy
 
@@ -44,10 +51,10 @@ Record the following (do not print the secret key in logs that the owner sees):
 V=(-H "Authorization: Bearer $VERCEL_TOKEN" -H "Content-Type: application/json")
 curl -s "${V[@]}" -X POST https://api.vercel.com/v10/projects \
   -d '{"name":"trackers","framework":null,"gitRepository":{"type":"github","repo":"pbcpiep/trackers"}}'
-CRON_SECRET=$(openssl rand -hex 24)
+CRON_SECRET=<the value stored in private.app_secrets above>
 APP_URL=https://trackers.vercel.app   # or the project's actual production domain
 # Add each variable (target production + preview):
-#   SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, SUPABASE_SECRET_KEY, RESEND_API_KEY,
+#   SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, RESEND_API_KEY,
 #   CRON_SECRET, ALLOWED_EMAILS=<owner email>, APP_URL
 curl -s "${V[@]}" -X POST "https://api.vercel.com/v10/projects/trackers/env?upsert=true" \
   -d "[{\"key\":\"CRON_SECRET\",\"value\":\"$CRON_SECRET\",\"type\":\"encrypted\",\"target\":[\"production\",\"preview\"]}, ...]"

@@ -27,8 +27,9 @@ core.js                     shared pure logic (dates, recurring status, due item
                             window.TrackerCore in the browser, require('../core.js') in api/
 cloud.js                    optional Supabase sync (window.Cloud); inactive without /api/config
 api/config.js               returns public Supabase URL + publishable key
-api/digest.js               daily email (Vercel Cron, Bearer CRON_SECRET) + "send test email" (user JWT)
+api/digest.js               daily email (Vercel Cron, Bearer CRON_SECRET → digest_rows() RPC) + "send test email" (user JWT, RLS)
 supabase/schema.sql         table + row-level security policies
+supabase/notes.sql          Apple Notes sync: notes table, set_notes_key()/import_notes() RPCs
 vercel.json                 cron schedule + headers
 tests/*.test.js             unit tests (node:test) for core.js and api/digest.js
 tests/e2e/*.e2e.js          browser tests (Playwright); sync test mocks Supabase
@@ -69,6 +70,6 @@ Run **both** test suites before pushing UI changes. E2E tests can save screensho
 
 ## Status and open items
 
-- **Deploy:** not yet live. Follow [`docs/deploy-runbook.md`](docs/deploy-runbook.md), which can be done in the dashboards or entirely via APIs.
+- **Deploy:** in progress. Supabase and Resend are set up; the Vercel project still needs creating. See the progress note at the top of [`docs/deploy-runbook.md`](docs/deploy-runbook.md).
 - **Home server:** the owner has an old laptop and hasn't yet run `tools/server-check` on it. Its report decides the setup: Ubuntu alongside Windows (A), replace Windows (B), or keep Windows (C). See `server/README.md`.
 - **Idea, nice-to-have:** show product results inside the Shopping List (Best Buy and eBay have free APIs; Amazon's API needs an affiliate account with sales), plus link previews for pasted URLs.

@@ -52,6 +52,8 @@
       auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, flowType: 'implicit' },
     });
     Cloud.enabled = true;
+    Cloud.supabaseUrl = cfg.supabaseUrl;
+    Cloud.supabaseKey = cfg.supabaseKey; // publishable: safe to show (the Notes Shortcut needs it)
     setStatus('signed-out');
 
     // Supabase advises against awaiting its own calls inside this callback.
@@ -159,6 +161,24 @@
   Cloud.accessToken = async () => {
     const { data } = await client.auth.getSession();
     return data.session ? data.session.access_token : null;
+  };
+
+  // ----- Apple Notes (uploaded by an iPhone Shortcut; read-only here) -----
+  Cloud.fetchNotes = async () => {
+    const { data, error } = await client.from('notes')
+      .select('folder, title, body, modified_at, synced_at')
+      .order('folder').order('title');
+    if (error) throw error;
+    return data || [];
+  };
+
+  /** Creates a new personal key for the Shortcut (replacing any old one). Only its hash is stored. */
+  Cloud.createNotesKey = async () => {
+    const bytes = crypto.getRandomValues(new Uint8Array(32));
+    const key = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+    const { error } = await client.rpc('set_notes_key', { p_key: key });
+    if (error) throw error;
+    return key;
   };
 
   window.Cloud = Cloud;
