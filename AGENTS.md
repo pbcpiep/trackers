@@ -29,6 +29,7 @@ cloud.js                    optional Supabase sync (window.Cloud); inactive with
 api/config.js               returns public Supabase URL + publishable key
 api/digest.js               daily email (Vercel Cron, Bearer CRON_SECRET → digest_rows() RPC) + "send test email" (user JWT, RLS)
 supabase/schema.sql         table + row-level security policies
+supabase/notes.sql          Apple Notes sync: notes table, set_notes_key()/import_notes() RPCs
 vercel.json                 cron schedule + headers
 tests/*.test.js             unit tests (node:test) for core.js and api/digest.js
 tests/e2e/*.e2e.js          browser tests (Playwright); sync test mocks Supabase

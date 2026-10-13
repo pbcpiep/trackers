@@ -535,11 +535,11 @@
     try { if (key && typeof a.selectionStart === 'number') sel = [a.selectionStart, a.selectionEnd]; } catch (e) { /* not a text input */ }
 
     const t = cur();
-    if (!t) ui.page = 'home';
+    if (!t && ui.page !== 'notes') ui.page = 'home';
     renderSidebar();
-    pageEl.innerHTML = !t ? homePage() : t.kind === 'habit' ? habitPage(t) : t.kind === 'recurring' ? recurringPage(t) : dbPage(t);
-    mobileTitleEl.textContent = t ? `${t.icon} ${t.name || 'Untitled'}` : 'Home';
-    document.title = t ? `${t.name || 'Untitled'} · My Trackers` : 'My Trackers';
+    pageEl.innerHTML = ui.page === 'notes' ? notesPage() : !t ? homePage() : t.kind === 'habit' ? habitPage(t) : t.kind === 'recurring' ? recurringPage(t) : dbPage(t);
+    mobileTitleEl.textContent = t ? `${t.icon} ${t.name || 'Untitled'}` : ui.page === 'notes' ? '📝 Notes' : 'Home';
+    document.title = t ? `${t.name || 'Untitled'} · My Trackers` : ui.page === 'notes' ? 'Notes · My Trackers' : 'My Trackers';
     bannerEl.innerHTML = storageOK ? '' : '<div class="banner">⚠️ Browser storage is unavailable, so changes won’t be saved. Use Export to keep a copy.</div>';
     if (modalState && modalState.live) drawModal();
 
@@ -566,6 +566,8 @@
             <span class="sb-icon">${esc(t.icon)}</span><span class="sb-label">${esc(t.name || 'Untitled')}</span>
           </a>`).join('')}
         <button class="sb-item sb-muted" data-action="new-tracker"><span class="sb-icon">＋</span><span class="sb-label">New tracker</span></button>
+        ${Cloud && Cloud.enabled ? `<div class="sb-section">Apple Notes</div>
+        <a class="sb-item ${ui.page === 'notes' ? 'active' : ''}" href="#/notes"><span class="sb-icon">📝</span><span class="sb-label">Notes</span></a>` : ''}
         ${financeLink('sb-item')}
       </nav>
       <div class="sb-foot">
@@ -1077,6 +1079,163 @@
     commit();
   });
 
+  // ----- Apple Notes (synced by an iPhone Shortcut; read-only here) -----
+  const notesState = { rows: null, loading: false, error: '', query: '', folder: '' };
+  const NOTES_FOLDERS = ['bills', 'shop/lists'];
+
+  async function loadNotes() {
+    if (!Cloud || !Cloud.enabled || !Cloud.user || notesState.loading) return;
+    notesState.loading = true; notesState.error = '';
+    if (ui.page === 'notes') render();
+    try {
+      notesState.rows = await Cloud.fetchNotes();
+    } catch (err) {
+      notesState.error = err.message || String(err);
+    }
+    notesState.loading = false;
+    if (ui.page === 'notes') render();
+  }
+
+  const isShoppingFolder = (f) => /shop|list|grocer/i.test(f);
+  const noteLines = (note) => String(note.body || '').split(/\r?\n/)
+    .map((l) => l.replace(/^\s*(?:[-*•◦▪]|\d+[.)]|\[[ xX]?\]|[☐☑✓✔])\s*/, '').trim())
+    .filter((l) => l && l.toLowerCase() !== String(note.title || '').trim().toLowerCase());
+
+  function notesPage() {
+    const cloudOn = Cloud && Cloud.enabled;
+    const head = `
+      <header class="page-head">
+        <span class="page-icon static" aria-hidden="true">📝</span>
+        <div class="page-title-row"><h1 class="page-title as-text">Notes</h1>
+          <a class="btn sm" href="mobilenotes://" title="Open the Apple Notes app">Open Apple Notes ↗</a></div>
+      </header>`;
+    if (!cloudOn) {
+      return `<div class="page">${head}<p class="muted empty">Apple Notes sync needs the hosted version of the app (it stores your notes in your Supabase account).</p></div>`;
+    }
+    if (!Cloud.user) {
+      return `<div class="page">${head}<p class="muted empty">Sign in to see your notes. <button class="link" data-action="account">Sign in</button></p></div>`;
+    }
+    const rows = notesState.rows || [];
+    const folders = [...new Set([...rows.map((r) => r.folder)])];
+    const folder = folders.includes(notesState.folder) ? notesState.folder : '';
+    const q = notesState.query.trim().toLowerCase();
+    const shown = rows.filter((r) => (!folder || r.folder === folder)
+      && (!q || `${r.title}\n${r.body}`.toLowerCase().includes(q)));
+    const lastSync = rows.reduce((a, r) => (r.synced_at > a ? r.synced_at : a), '');
+    const shop = state.trackers.find((t) => t.kind === 'database' && t.shop);
+    const fmtStamp = (s) => { try { return new Date(s).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }); } catch (e) { return ''; } };
+
+    return `
+      <div class="page">
+        ${head}
+        <p class="muted page-hint">Read-only copies of your Apple Notes folders, sent by your iPhone Shortcut${lastSync ? ` · last synced ${esc(fmtStamp(lastSync))}` : ''}. Edit them in Apple Notes.</p>
+        <div class="toolbar">
+          <div class="tabs" role="tablist">
+            <button class="tab ${folder ? '' : 'active'}" data-action="notes-folder" data-val="" role="tab" aria-selected="${!folder}">All</button>
+            ${folders.map((f) => `<button class="tab ${folder === f ? 'active' : ''}" data-action="notes-folder" data-val="${esc(f)}" role="tab" aria-selected="${folder === f}">${esc(f)}</button>`).join('')}
+          </div>
+          <div class="tools">
+            <input type="search" class="search" placeholder="Search notes…" data-field="notes-search" data-key="notes-search" value="${esc(notesState.query)}" aria-label="Search notes">
+            <button class="btn" data-action="notes-refresh" ${notesState.loading ? 'disabled' : ''}>${notesState.loading ? 'Loading…' : '↻ Refresh'}</button>
+          </div>
+        </div>
+        ${notesState.error ? `<div class="banner">Couldn’t load notes: ${esc(notesState.error)}</div>` : ''}
+        ${notesState.rows === null && !notesState.error ? '<p class="muted empty">Loading…</p>' : ''}
+        ${notesState.rows && !rows.length ? `
+          <div class="card notes-empty">
+            <h2>No notes synced yet</h2>
+            <p class="muted">Set up the iPhone Shortcut once, and your <b>${NOTES_FOLDERS.map(esc).join('</b> and <b>')}</b> folders will appear here.</p>
+            <button class="btn primary" data-action="notes-setup">Set up Apple Notes sync</button>
+          </div>` : ''}
+        ${rows.length && !shown.length ? '<p class="muted empty">No notes match.</p>' : ''}
+        <div class="notes-list">
+          ${shown.map((n) => {
+            const idx = rows.indexOf(n);
+            const lines = String(n.body || '').split(/\r?\n/);
+            return `<details class="note-card">
+              <summary>
+                <span class="note-title">${esc(n.title)}</span>
+                <span class="muted note-meta">${esc(n.folder)}${n.modified_at ? ` · edited ${esc(fmtStamp(n.modified_at))}` : ''}</span>
+                <span class="note-preview muted">${esc(lines.filter((l) => l.trim() && l.trim() !== n.title.trim()).slice(0, 2).join(' · ').slice(0, 160))}</span>
+              </summary>
+              <div class="note-body">${esc(n.body)}</div>
+              ${shop && isShoppingFolder(n.folder) && noteLines(n).length ? `<button class="btn sm" data-action="notes-to-shopping" data-val="${idx}">🛒 Add ${plural(noteLines(n).length, 'line', 'lines')} to ${esc(shop.name)}</button>` : ''}
+            </details>`;
+          }).join('')}
+        </div>
+        ${rows.length ? '<p class="muted small"><button class="link" data-action="notes-setup">Shortcut setup &amp; key</button></p>' : ''}
+      </div>`;
+  }
+
+  function addNoteToShopping(note) {
+    const t = state.trackers.find((x) => x.kind === 'database' && x.shop);
+    if (!t) return 0;
+    const titleId = t.properties[0].id;
+    const existing = new Set(t.rows.filter((r) => !Core.isRowDone(t, r)).map((r) => String(r.values[titleId] || '').trim().toLowerCase()));
+    let added = 0;
+    for (const line of noteLines(note)) {
+      if (existing.has(line.toLowerCase())) continue;
+      const r = addRow(t);
+      if (safeUrl(line)) applyShopLink(t, r, line); else r.values[titleId] = line.slice(0, 200);
+      existing.add(line.toLowerCase());
+      added++;
+    }
+    return added;
+  }
+
+  function openNotesSetup() {
+    let key = '';
+    let busy = false;
+    const copyRow = (label, value, id) => `
+      <div class="field"><span>${label}</span>
+        <div class="btn-row"><input class="copy-input" id="${id}" value="${esc(value)}" readonly aria-label="${esc(label)}">
+        <button type="button" class="btn sm" data-action="copy" data-val="${id}">Copy</button></div></div>`;
+    openModal({
+      title: 'Apple Notes sync',
+      cls: 'wide',
+      live: true,
+      body: () => {
+        if (!Cloud || !Cloud.enabled || !Cloud.user) return '<p>Sign in first (☁️ in the sidebar), then come back here.</p>';
+        return `
+          <p>An <b>iPhone Shortcut</b> sends the notes in your <b>${NOTES_FOLDERS.map(esc).join('</b> and <b>')}</b> folders to this app. Nothing else in Apple Notes is shared.</p>
+          <h3 class="modal-section">1. Create your personal Notes key</h3>
+          ${key
+            ? `<p class="muted small">Copy it into the Shortcut now. For your safety it’s only shown once; making a new key stops the old one working.</p>${copyRow('Your Notes key', key, 'nk-key')}`
+            : `<button type="button" class="btn primary" data-action="notes-create-key" ${busy ? 'disabled' : ''}>${busy ? 'Creating…' : 'Create my Notes key'}</button>
+               <p class="muted small">Already set up the Shortcut? You don’t need a new key unless you lost it.</p>`}
+          <h3 class="modal-section">2. Build the Shortcut (once, about 5 minutes)</h3>
+          ${copyRow('Upload address', `${Cloud.supabaseUrl}/rest/v1/rpc/import_notes`, 'nk-url')}
+          ${copyRow('apikey header (public, safe to share)', Cloud.supabaseKey, 'nk-apikey')}
+          <ol class="steps">
+            <li>Open the <b>Shortcuts</b> app → <b>＋</b>. Name it <b>Sync Notes to Trackers</b>.</li>
+            <li>Add <b>Find Notes</b>. Tap <i>Add Filter</i> → <b>Folder</b> is <b>bills</b>.</li>
+            <li>Add <b>Repeat with Each</b> (on the notes).</li>
+            <li>Inside the repeat, add <b>Dictionary</b> with three <i>Text</i> fields:
+              <code>title</code> = <i>Repeat Item → Name</i>, <code>body</code> = <i>Repeat Item → Body</i>,
+              <code>modified</code> = <i>Repeat Item → Last Modified Date</i> (tap it → Date Format <b>ISO 8601</b>).</li>
+            <li>Still inside, add <b>Add to Variable</b> → name it <b>notes</b>. End the repeat.</li>
+            <li>Add <b>Get Contents of URL</b> with the upload address above. Tap <i>Show More</i>: Method <b>POST</b>;
+              Headers <code>apikey</code> = the apikey above and <code>Content-Type</code> = <code>application/json</code>;
+              Request Body <b>JSON</b> with three <i>Text</i> fields: <code>p_key</code> = your Notes key,
+              <code>p_folder</code> = <code>bills</code>, <code>p_notes</code> = the <b>notes</b> variable.</li>
+            <li>Add <b>Set Variable</b>: <b>notes</b> to nothing (empty), then repeat steps 2–6 for the folder <b>shop/lists</b>
+              (long-press the actions → Duplicate, then change the folder and <code>p_folder</code>).</li>
+            <li>Run it once. Your notes appear on the Notes page (tap ↻ Refresh).</li>
+            <li><b>Make it automatic:</b> Shortcuts → <b>Automation</b> → ＋ → <b>App</b> → Notes → <b>Is Closed</b> → Run Immediately → your shortcut.</li>
+          </ol>`;
+      },
+    });
+    const onClick = async (e) => {
+      const b = e.target.closest('[data-action="notes-create-key"]');
+      if (!b) return;
+      busy = true; drawModal();
+      try { key = await Cloud.createNotesKey(); } catch (err) { alert(`Couldn’t create a key: ${err.message || err}`); }
+      busy = false; drawModal();
+    };
+    modal.addEventListener('click', onClick);
+    modal.addEventListener('close', () => modal.removeEventListener('click', onClick), { once: true });
+  }
+
   function openSettings() {
     const s = state.settings;
     const cloudOn = Cloud && Cloud.enabled;
@@ -1092,6 +1251,10 @@
           ? (email ? `Sent to <b>${esc(email)}</b>. Your time zone: ${esc(s.timezone)}.` : 'Sign in first. The email goes to the address you sign in with.')
           : 'Needs the hosted version (Vercel + Supabase). See the README for setup.'}</p>
         ${email ? '<button type="button" class="btn sm" data-action="send-test-email">Send a test email now</button>' : ''}
+
+        <h3 class="modal-section">📝 Apple Notes</h3>
+        <p class="muted small">Show your <b>${NOTES_FOLDERS.map(esc).join('</b> and <b>')}</b> folders on a Notes page, via an iPhone Shortcut.</p>
+        <button type="button" class="btn sm" data-action="notes-setup" ${cloudOn ? '' : 'disabled'}>Set up Apple Notes sync</button>
 
         <h3 class="modal-section">💰 Finances</h3>
         <label class="field"><span>Actual Budget address</span>
@@ -1396,7 +1559,8 @@
   // ---------------------------------------------------------------------------
   function route() {
     const m = location.hash.match(/^#\/t\/([\w-]+)/);
-    const next = m && findTracker(m[1]) ? m[1] : 'home';
+    const next = location.hash === '#/notes' ? 'notes' : m && findTracker(m[1]) ? m[1] : 'home';
+    if (next === 'notes' && next !== ui.page) loadNotes();
     if (next !== ui.page) ui.weekOffset = 0;
     ui.page = next;
     appEl.classList.remove('sb-open');
@@ -1575,6 +1739,26 @@
       }
       case 'toggle-hide-done': t.view.hideDone = !t.view.hideDone; commit(); break;
       case 'settings': appEl.classList.remove('sb-open'); openSettings(); break;
+      case 'notes-setup': openNotesSetup(); break;
+      case 'notes-refresh': loadNotes(); break;
+      case 'notes-folder': notesState.folder = el.dataset.val || ''; render(); break;
+      case 'notes-to-shopping': {
+        const note = (notesState.rows || [])[Number(el.dataset.val)];
+        if (!note) break;
+        const n = addNoteToShopping(note);
+        save();
+        el.textContent = n ? `✓ Added ${plural(n, 'item', 'items')}` : '✓ Already on your list';
+        el.disabled = true;
+        break;
+      }
+      case 'copy': {
+        const input = document.getElementById(el.dataset.val);
+        if (!input) break;
+        const done = () => { el.textContent = '✓ Copied'; setTimeout(() => { el.textContent = 'Copy'; }, 1500); };
+        if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(input.value).then(done, () => { input.select(); document.execCommand('copy'); done(); });
+        else { input.select(); document.execCommand('copy'); done(); }
+        break;
+      }
       case 'account': appEl.classList.remove('sb-open'); openAccount(); break;
       case 'sign-out':
         if (confirm('Sign out? Your trackers stay on this device, but stop syncing until you sign in again.')) {
@@ -1667,7 +1851,8 @@
   document.addEventListener('input', (e) => {
     const el = e.target;
     const t = cur();
-    if (el.dataset.field === 'search' && t) { t.view.query = el.value; commit(); }
+    if (el.dataset.field === 'notes-search') { notesState.query = el.value; render(); }
+    else if (el.dataset.field === 'search' && t) { t.view.query = el.value; commit(); }
     else if (el.dataset.field === 'tracker-name' && t) { t.name = el.value; save(); renderSidebar(); mobileTitleEl.textContent = `${t.icon} ${t.name || 'Untitled'}`; }
     else if (el.dataset.field === 'prop-type') {
       const f = el.form && el.form.querySelector('.options-field');
@@ -1762,7 +1947,11 @@
         if (!cur()) ui.page = 'home';
         render();
       },
-      onStatus: () => { renderSidebar(); if (modalState && modalState.live) drawModal(); },
+      onStatus: () => {
+        renderSidebar();
+        if (modalState && modalState.live) drawModal();
+        if (ui.page === 'notes') { if (Cloud.user && notesState.rows === null) loadNotes(); else render(); }
+      },
     });
   }
 })();

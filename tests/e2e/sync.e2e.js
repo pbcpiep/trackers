@@ -15,6 +15,11 @@ function findSdk() {
   return null;
 }
 
+const NOTES = [
+  { folder: 'bills', title: 'Electric bill', body: 'Electric bill\nDue the 15th\n$84.20 autopay', modified_at: '2026-10-10T12:00:00+00:00', synced_at: '2026-10-12T08:00:00+00:00' },
+  { folder: 'bills', title: '<img src=x onerror=window.PWNED=1>', body: '<script>window.PWNED=2</script>', modified_at: null, synced_at: '2026-10-12T08:00:00+00:00' },
+  { folder: 'shop/lists', title: 'Groceries', body: 'Groceries\n- Milk\n- Eggs\n• Coffee beans\n[ ] Paper towels', modified_at: null, synced_at: '2026-10-12T08:00:00+00:00' },
+];
 const USER = { id: '11111111-1111-1111-1111-111111111111', email: 'me@example.com', aud: 'authenticated', role: 'authenticated' };
 const b64 = (o) => Buffer.from(JSON.stringify(o)).toString('base64url');
 const jwt = () => `${b64({ alg: 'HS256', typ: 'JWT' })}.${b64({ sub: USER.id, email: USER.email, role: 'authenticated', aud: 'authenticated', exp: Math.floor(Date.now() / 1000) + 3600 })}.sig`;
@@ -44,6 +49,12 @@ const jwt = () => `${b64({ alg: 'HS256', typ: 'JWT' })}.${b64({ sub: USER.id, em
       }
       if (url.pathname === '/auth/v1/user') return r.fulfill({ json: USER });
       if (url.pathname === '/auth/v1/logout') return r.fulfill({ status: 204, body: '' });
+      if (url.pathname === '/rest/v1/notes' && method === 'GET') return r.fulfill({ json: NOTES });
+      if (url.pathname === '/rest/v1/rpc/set_notes_key') {
+        const k = JSON.parse(req.postData()).p_key;
+        log.push(/^[0-9a-f]{64}$/.test(k) ? 'NOTES-KEY-OK' : 'NOTES-KEY-BAD');
+        return r.fulfill({ status: 204, body: '' });
+      }
       if (url.pathname === '/rest/v1/user_state') {
         if (method === 'GET') { const rows = db ? [{ data: db.data, updated_at: db.updated_at }] : []; return r.fulfill({ json: single ? (rows[0] ?? null) : rows }); }
         if (method === 'POST') { db = { data: JSON.parse(req.postData()).data, updated_at: pgTime() }; log.push('INSERT'); return r.fulfill({ status: 201, json: single ? { updated_at: db.updated_at } : [{ updated_at: db.updated_at }] }); }
@@ -95,6 +106,35 @@ const jwt = () => `${b64({ alg: 'HS256', typ: 'JWT' })}.${b64({ sub: USER.id, em
   const q = await device(browser, { width: 390, height: 844 });
   await signIn(q);
   check((await q.$$eval('.tracker-card .tc-name', (e) => e.map((x) => x.innerText))).includes('Gym (phone)'), 'a second device gets the account\'s trackers');
+  await q.goto(server.url + '#/notes'); await q.waitForSelector('.note-card');
+  await q.locator('.note-card summary').first().click();
+  await q.screenshot({ path: `${require('./helpers').OUT}/notes-phone.png`, fullPage: true });
+  check(!(await q.evaluate(() => document.documentElement.scrollWidth > innerWidth)), 'Notes page fits a phone screen');
+
+  // Apple Notes page
+  await p.click('.sb-item:has-text("Notes")');
+  await p.waitForSelector('.note-card');
+  check(await p.locator('.note-card').count() === 3, 'Notes page lists synced notes');
+  check(await p.evaluate(() => window.PWNED) === undefined, 'note titles and bodies cannot run script');
+  await p.click('[data-action="notes-folder"][data-val="shop/lists"]');
+  check(await p.locator('.note-card').count() === 1, 'folder tab filters notes');
+  await p.click('.note-card summary');
+  await p.click('[data-action="notes-to-shopping"]');
+  await p.click('.sb-item:has-text("Shopping")'); await p.waitForSelector('.shop-add');
+  const items = await p.$$eval('.title-input', (e) => e.map((x) => x.value));
+  check(['Milk', 'Eggs', 'Coffee beans', 'Paper towels'].every((x) => items.includes(x)) && !items.includes('Groceries'), 'shop/lists note lines become Shopping List items');
+  await p.click('.sb-item:has-text("Notes")'); await p.waitForSelector('.note-card');
+  await p.fill('[data-key="notes-search"]', 'autopay');
+  await p.click('[data-action="notes-folder"][data-val=""]');
+  check(await p.locator('.note-card').count() === 1, 'search finds text inside notes');
+  await p.fill('[data-key="notes-search"]', '');
+  await p.click('[data-action="settings"]');
+  await p.click('dialog [data-action="notes-setup"]');
+  await p.click('[data-action="notes-create-key"]');
+  await p.waitForSelector('#nk-key');
+  check(log.includes('NOTES-KEY-OK') && /^[0-9a-f]{64}$/.test(await p.inputValue('#nk-key')), 'Notes key is created and shown once');
+  check((await p.inputValue('#nk-url')).endsWith('/rest/v1/rpc/import_notes'), 'setup shows the upload address');
+  await p.click('dialog [data-action="close-modal"]');
 
   await p.click('[data-action="settings"]'); await p.click('[data-action="send-test-email"]');
   await p.waitForFunction(() => document.querySelector('[data-action="send-test-email"]').innerText.includes('Sent'));
