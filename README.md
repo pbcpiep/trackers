@@ -65,9 +65,8 @@ You'll create three free accounts: **Supabase** (database and sign-in), **Resend
 3. Go to **Project Settings → API Keys** and note three values:
    - the **Project URL** (`https://xxxx.supabase.co`)
    - the **publishable** key (older projects call it the **anon** key)
-   - a **secret** key (older projects: **service_role**)
 
-   Keep the secret key private. It only goes into Vercel.
+   You don't need the secret/service_role key; the app never uses it.
 4. *(Recommended)* So you can sign in by typing a code (handy for the phone home-screen app), go to **Authentication → Emails → Magic Link** and add this line to the template:
    `Or enter this code: {{ .Token }}`
 
@@ -89,9 +88,8 @@ Until you verify your own domain, Resend only delivers mail from `onboarding@res
    | --- | --- |
    | `SUPABASE_URL` | Project URL from step 1 |
    | `SUPABASE_PUBLISHABLE_KEY` | Publishable (or anon) key |
-   | `SUPABASE_SECRET_KEY` | Secret (or service_role) key |
    | `RESEND_API_KEY` | Key from step 2 |
-   | `CRON_SECRET` | Any long random string, e.g. the output of `openssl rand -hex 24` |
+   | `CRON_SECRET` | A long random string, e.g. the output of `openssl rand -hex 32`. Store the same value in the database (see `supabase/schema.sql`) |
    | `ALLOWED_EMAILS` | Your email. Digests only go to addresses listed here |
    | `APP_URL` *(optional)* | Your site URL, used for the link in the email |
    | `DIGEST_FROM` *(optional)* | e.g. `Trackers <me@mydomain.com>`, once you've verified a domain in Resend |
