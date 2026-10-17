@@ -70,6 +70,6 @@ Run **both** test suites before pushing UI changes. E2E tests can save screensho
 
 ## Status and open items
 
-- **Deploy:** in progress. Supabase and Resend are set up; the Vercel project still needs creating. See the progress note at the top of [`docs/deploy-runbook.md`](docs/deploy-runbook.md).
+- **Deploy:** the Vercel project is created, and `main` deployed successfully on October 13, 2026. Supabase and Resend are set up. See the progress note at the top of [`docs/deploy-runbook.md`](docs/deploy-runbook.md).
 - **Home server:** the owner has an old laptop and hasn't yet run `tools/server-check` on it. Its report decides the setup: Ubuntu alongside Windows (A), replace Windows (B), or keep Windows (C). See `server/README.md`.
 - **Idea, nice-to-have:** show product results inside the Shopping List (Best Buy and eBay have free APIs; Amazon's API needs an affiliate account with sales), plus link previews for pasted URLs.
