@@ -45,6 +45,7 @@ The **New tracker** menu has more templates: Vocabulary, Reading List, Mood Jour
 - a link to your Finances
 
 **How to use it:**
+- **Phone menu:** opening the sidebar holds the page in place. Scroll within the menu to reach its lower controls, then close it to return to the same spot.
 - **Every-N-days trackers** (chores, friends, haircuts): tap **Done** when you do the thing, and the next due date is calculated for you. Click an item's name to change how often it repeats, add notes, or log an earlier date.
 - **Tables:** edit cells inline, switch to the **Board** view, sort, search, and add columns (text, number, select, checkbox, date, rating, URL).
 - **One-tap links:** give any habit a link (edit the habit, then *Link*) and a ↗ button appears on Home and in the week view. Many apps open straight from their website link. If yours doesn't, tap **Open the app with an iPhone Shortcut**: it walks you through making a one-action Shortcut that opens the app itself.
