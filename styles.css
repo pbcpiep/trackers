@@ -599,6 +599,12 @@ a.menu-item { color: inherit; text-decoration: none; }
 .note-card > summary::-webkit-details-marker { display: none; }
 .note-card > summary:hover { background: var(--hover); border-radius: 10px; }
 .note-title { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.note-inline { font-weight: 400; }
+.note-compact:not([open]) > summary { grid-template-columns: minmax(0, 1fr); }
+.note-compact:not([open]) .note-meta { display: none; }
+.note-card[open] .note-title { white-space: normal; overflow-wrap: anywhere; }
+.note-bill .note-inline, .note-bill .note-preview, .note-bill .note-body { font-variant-numeric: tabular-nums; }
+.note-bill .note-preview { color: var(--text); }
 .note-meta { font-size: 12.5px; white-space: nowrap; }
 .note-preview { grid-column: 1 / -1; font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .note-card[open] .note-preview { display: none; }
@@ -614,5 +620,5 @@ a.menu-item { color: inherit; text-decoration: none; }
 .steps li { margin-bottom: 8px; }
 @media (max-width: 760px) {
   .note-card > summary { grid-template-columns: minmax(0, 1fr); }
-  .note-meta { white-space: normal; }
+  .note-meta { white-space: normal; overflow-wrap: anywhere; }
 }

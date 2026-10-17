@@ -1151,15 +1151,17 @@
         <div class="notes-list">
           ${shown.map((n) => {
             const idx = rows.indexOf(n);
-            const lines = String(n.body || '').split(/\r?\n/);
-            return `<details class="note-card">
+            const lines = isShoppingFolder(n.folder) ? noteLines(n) : String(n.body || '').split(/\r?\n/)
+              .map((l) => l.trim()).filter((l) => l && l.toLowerCase() !== n.title.trim().toLowerCase());
+            const compact = lines.length <= 1;
+            return `<details class="note-card${compact ? ' note-compact' : ''}${n.folder.toLowerCase() === 'bills' ? ' note-bill' : ''}">
               <summary>
-                <span class="note-title">${esc(n.title)}</span>
+                <span class="note-title">${esc(n.title)}${compact && lines.length ? `<span class="note-inline">${n.title.trim() ? ' · ' : ''}${esc(lines[0])}</span>` : ''}</span>
                 <span class="muted note-meta">${esc(n.folder)}${n.modified_at ? ` · edited ${esc(fmtStamp(n.modified_at))}` : ''}</span>
-                <span class="note-preview muted">${esc(lines.filter((l) => l.trim() && l.trim() !== n.title.trim()).slice(0, 2).join(' · ').slice(0, 160))}</span>
+                ${!compact ? `<span class="note-preview muted">${esc(lines.slice(0, 2).join(' · ').slice(0, 160))}</span>` : ''}
               </summary>
               <div class="note-body">${esc(n.body)}</div>
-              ${shop && isShoppingFolder(n.folder) && noteLines(n).length ? `<button class="btn sm" data-action="notes-to-shopping" data-val="${idx}">🛒 Add ${plural(noteLines(n).length, 'line', 'lines')} to ${esc(shop.name)}</button>` : ''}
+              ${shop && isShoppingFolder(n.folder) && lines.length ? `<button class="btn sm" data-action="notes-to-shopping" data-val="${idx}">🛒 Add ${esc(plural(lines.length, 'line', 'lines'))} to ${esc(shop.name)}</button>` : ''}
             </details>`;
           }).join('')}
         </div>

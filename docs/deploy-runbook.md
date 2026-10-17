@@ -1,6 +1,6 @@
 # Deploy runbook (for an agent or a person)
 
-> **Progress (2026-10-13):** Supabase is done: project `ffxlnfpamjzydtwiyrss`, schema applied, digest secret stored. A send-only Resend key was created. **Vercel is not done yet:** the Vercel connector had read-only access to the owner's account, so creating the project (step 2) is still pending.
+> **Progress (2026-10-13):** Supabase is done: project `ffxlnfpamjzydtwiyrss`, schema applied, digest secret stored. A send-only Resend key was created. **Vercel is created, and `main` deployed successfully on October 13, 2026.** The steps below remain as a setup reference; project creation is no longer pending.
 
 This runbook takes the app from "code in GitHub" to live on Vercel, with Supabase sync and the daily email. It can be done by clicking through the dashboards (see the README, "Hosting it on Vercel") or entirely through APIs, as below.
 
