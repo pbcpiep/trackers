@@ -37,6 +37,8 @@ It also links out to a self-hosted **Actual Budget** for finances.
 
 The **New tracker** menu has more templates: Vocabulary, Reading List, Mood Journal, Goals, and blank ones of each type.
 
+**Experimental Summit concept:** try [`prototypes/summit.html`](prototypes/summit.html) for two mountain climbs, quick habit check-off, a sample budget-to-savings move, and a 10 p.m. reminder preview. It uses separate sample data; real financial connections and notification delivery are not enabled. [How to try it and open design choices](docs/prototypes/summit.md).
+
 **📝 Notes** shows your Apple Notes **bills** and **shop/lists** folders inside the app. An iPhone Shortcut sends them over, and each shop/lists note has a one-tap **Add to Shopping List** button. Setup: [`docs/apple-notes-shortcut.md`](docs/apple-notes-shortcut.md), or **Settings & reminders → Apple Notes** in the app.
 
 **Home** gathers everything in one place:

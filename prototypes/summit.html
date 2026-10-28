@@ -1,0 +1,313 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Summit — My Trackers concept</title>
+  <style>
+    :root { --ink:#233d51; --muted:#526c7d; --pine:#256b61; --lake:#285b92; --line:#cddce5; --paper:#f3f8fb; }
+    * { box-sizing:border-box; }
+    body { margin:0; background:var(--paper); color:var(--ink); font:16px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+    button,input,select { font:inherit; color:inherit; }
+    button,a,input { touch-action:manipulation; }
+    button { cursor:pointer; }
+    button:disabled { cursor:default; opacity:.65; }
+    :focus-visible { outline:3px solid #b76220; outline-offset:4px; }
+    .shell { max-width:1120px; margin:auto; padding:24px 28px 72px; }
+    .top { display:flex; align-items:center; justify-content:space-between; gap:16px; padding-bottom:18px; border-bottom:1px solid var(--line); }
+    .brand { display:flex; align-items:center; gap:10px; font-weight:700; }
+    .brand svg { width:32px; height:32px; }
+    .sample { color:#365f75; background:#e0edf5; font-size:13px; padding:4px 10px; border-radius:20px; }
+    .text-button { border:0; background:none; text-decoration:underline; text-underline-offset:4px; min-height:44px; padding:8px; }
+    h1,h2,h3,p { margin-top:0; }
+    h1 { font:normal clamp(32px,4vw,48px)/1.15 Georgia,serif; letter-spacing:-1px; margin:30px 0 10px; }
+    h2 { font-size:21px; line-height:1.3; margin-bottom:8px; }
+    h3 { font-size:17px; margin-bottom:8px; }
+    .intro { color:var(--muted); max-width:660px; margin-bottom:26px; }
+    .workspace { display:grid; grid-template-columns:1.15fr 1fr; gap:24px; align-items:start; }
+    .climb { background:#dfedf4; border-radius:18px; overflow:hidden; border:1px solid #c5dae5; }
+    .climb-switch { display:grid; grid-template-columns:1fr 1fr; gap:6px; margin:12px; padding:4px; background:#cddfe9; border-radius:12px; }
+    .climb-switch button { min-height:55px; border:0; background:none; border-radius:9px; line-height:1.2; padding:10px 6px; }
+    .climb-switch button[aria-pressed=true] { background:white; color:#183d58; box-shadow:0 2px 4px #284c6415; }
+    .climb-switch small { display:block; font-size:12px; margin-top:4px; }
+    .scene { position:relative; }
+    .scene svg { display:block; width:100%; height:auto; }
+    .scene-label { position:absolute; left:22px; top:8px; font-size:13px; color:#3e6379; }
+    .scene-label strong { display:block; font-size:22px; color:#254c65; font-weight:600; }
+    #climber { transition:transform .6s ease; }
+    .climb-caption { padding:4px 22px 22px; }
+    .climb-caption strong { display:block; font-size:20px; }
+    .climb-caption p { margin:4px 0 0; color:#42667d; font-size:14px; }
+    .quick { padding:4px 0; }
+    .muted { color:var(--muted); }
+    .small { font-size:13px; }
+    .habits { display:grid; gap:9px; margin:18px 0 14px; padding:0; list-style:none; }
+    .habit { display:flex; align-items:center; width:100%; min-height:64px; gap:14px; padding:12px 16px; background:white; border:1px solid var(--line); border-radius:10px; text-align:left; }
+    .habit:hover { border-color:var(--pine); }
+    .habit[aria-pressed=true] { background:#e7f2ec; border-color:#83b0a2; }
+    .check { display:grid; place-items:center; flex:none; width:27px; height:27px; border:1.5px solid #91a9b6; border-radius:50%; color:white; }
+    .habit[aria-pressed=true] .check { background:var(--pine); border-color:var(--pine); }
+    .habit-copy { flex:1; }
+    .habit-copy small { display:block; color:var(--muted); font-size:12px; }
+    .habit-state { font-size:13px; color:var(--pine); }
+    .feedback { min-height:48px; font-size:14px; display:flex; align-items:center; gap:10px; }
+    .feedback p { margin:0; flex:1; }
+    .section { border-top:1px solid var(--line); margin-top:32px; padding-top:26px; }
+    .money-grid { display:grid; grid-template-columns:1fr 1fr; gap:32px; margin-top:18px; }
+    .amount { font:normal 34px/1.2 Georgia,serif; margin:12px 0 8px; }
+    .amount span:last-child { font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; color:var(--muted); }
+    progress { width:100%; height:12px; appearance:none; border:0; border-radius:8px; overflow:hidden; background:#dce7ec; }
+    progress::-webkit-progress-bar { background:#dce7ec; }
+    progress::-webkit-progress-value { background:var(--pine); border-radius:8px; }
+    progress::-moz-progress-bar { background:var(--pine); }
+    .budget-row { display:flex; justify-content:space-between; gap:10px; margin:10px 0; }
+    .transfer { background:white; border:1px solid var(--line); border-radius:12px; padding:18px; }
+    .transfer label { display:block; font-size:14px; margin-bottom:8px; }
+    .input-row { display:flex; gap:8px; align-items:stretch; }
+    input[type=number] { width:100px; min-width:0; padding:9px 10px; background:var(--paper); border:1px solid #8ca6b6; border-radius:7px; }
+    .primary { min-height:46px; padding:9px 15px; border:1px solid var(--pine); border-radius:8px; color:white; background:var(--pine); }
+    .secondary { min-height:44px; padding:9px 13px; border:1px solid #8ca6b6; border-radius:8px; background:white; }
+    .error { color:#a23b28; min-height:22px; margin:8px 0 0; font-size:13px; }
+    .reminder-grid { display:grid; grid-template-columns:1fr 1fr; gap:32px; margin-top:18px; }
+    .reminder-setting { display:flex; align-items:center; gap:14px; flex-wrap:wrap; }
+    input[type=time] { padding:8px; min-height:44px; max-width:100%; border:1px solid #8ca6b6; border-radius:7px; background:white; }
+    .toggle { display:flex; align-items:center; gap:8px; margin:16px 0; }
+    .toggle input { width:20px; height:20px; }
+    .notification { min-height:170px; background:#e1eaf0; border:1px solid #b8ccd9; border-radius:18px; padding:18px; }
+    .notification .small { color:#526c7d; }
+    .notification p { margin:8px 0; }
+    .notification button { margin-top:4px; }
+    .alternatives { display:grid; grid-template-columns:repeat(3,1fr); gap:16px; margin-top:18px; }
+    .alternative { padding:18px; background:#e7f0f5; border-radius:10px; }
+    .mini { height:55px; display:flex; align-items:center; font-size:32px; }
+    .trail-dots { font-size:28px; letter-spacing:5px; color:var(--pine); }
+    .ring { width:43px; height:43px; border:7px solid #b8d0dc; border-top-color:var(--pine); border-right-color:var(--pine); border-radius:50%; }
+    .end { margin-top:32px; font-size:13px; color:var(--muted); }
+    a { color:var(--lake); text-underline-offset:3px; }
+    [hidden] { display:none!important; }
+    @media(max-width:760px) {
+      .shell { padding:16px 16px 48px; }
+      .top { gap:8px; }
+      .brand { gap:7px; }
+      .sample { font-size:11px; padding:4px 7px; }
+      .workspace,.money-grid,.reminder-grid { grid-template-columns:1fr; gap:22px; }
+      .intro { font-size:15px; }
+      .scene svg { max-height:255px; }
+      .scene-label { top:0; }
+      .scene-label strong { font-size:19px; }
+      .climb-caption { padding-bottom:16px; }
+      .quick { padding:0; }
+      .alternatives { grid-template-columns:1fr; }
+      .alternative { display:grid; grid-template-columns:55px 1fr; gap:10px; }
+      .alternative p { margin:0; }
+      .input-row .primary { flex:1; }
+    }
+    @media(prefers-reduced-motion:reduce) { *,*::before,*::after { transition:none!important; scroll-behavior:auto!important; } }
+  </style>
+</head>
+<body>
+<main class="shell">
+  <header class="top">
+    <div class="brand"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M2 27 13 6 19 16 23 10 31 27Z" fill="#285b72"/><path d="m9 14 4-8 5 9-5-2Z" fill="#c1dde9"/></svg><span>My Trackers</span><span class="sample">Sample-data prototype</span></div>
+    <button class="text-button" id="reset">Reset demo</button>
+  </header>
+  <h1>A little higher, every day.</h1>
+  <p class="intro">Small actions, visible progress. One climb for showing up. Another for the money you actually save.</p>
+  <div class="workspace">
+    <section class="climb" aria-label="Your two climbs">
+      <div class="climb-switch" role="group" aria-label="Choose a climb">
+        <button id="daily-mode" aria-pressed="true">Daily climb<small id="daily-tab-count">0 of 4 steps</small></button>
+        <button id="saving-mode" aria-pressed="false">Savings climb<small id="saving-tab-count">40% of the way</small></button>
+      </div>
+      <div class="scene">
+        <div class="scene-label"><span id="scene-label">Today’s trail</span><strong id="scene-amount">Base camp</strong></div>
+        <svg viewBox="0 0 520 310" role="img" aria-labelledby="mountain-title mountain-desc">
+          <title id="mountain-title">Your daily mountain climb</title><desc id="mountain-desc">The climber starts at base camp and advances when a habit is marked done.</desc>
+          <defs><linearGradient id="sky" x2="0" y2="1"><stop stop-color="#d9eaf4"/><stop offset="1" stop-color="#eef6fa"/></linearGradient><linearGradient id="face" x2=".8" y2="1"><stop stop-color="#7ea3b5"/><stop offset="1" stop-color="#b6cfd9"/></linearGradient></defs>
+          <path fill="url(#sky)" d="M0 0h520v310H0z"/><circle cx="420" cy="62" r="28" fill="#f0c784"/>
+          <path d="M0 229 101 116 159 188 229 113 315 235 403 125 520 236V310H0Z" fill="#c3d9e3"/>
+          <path d="m80 296 215-246 201 246Z" fill="url(#face)"/><path d="m295 50 201 246H298l-49-96Z" fill="#668fa2"/>
+          <path d="m248 105 47-55 51 62-32-14-18 16-20-24Z" fill="#f8fcff"/>
+          <path d="M0 281q92-38 171-4t172 4 177-5v34H0Z" fill="#5d8f81"/><path d="M0 300q130-34 270-8t250-2v20H0Z" fill="#387565"/>
+          <path id="route" d="M102 272 C180 255 219 247 190 218 S224 182 258 169 S213 141 271 111 S280 82 295 64" fill="none" stroke="#e8f2f4" stroke-width="5" stroke-linecap="round"/>
+          <path id="route-progress" d="M102 272 C180 255 219 247 190 218 S224 182 258 169 S213 141 271 111 S280 82 295 64" fill="none" stroke="#f0b460" stroke-width="5" stroke-linecap="round"/>
+          <path d="M295 65V41m0 0 22 8-22 5" fill="#d57b43" stroke="#345366" stroke-width="2"/>
+          <g id="climber" transform="translate(102,272)"><circle r="13" fill="#fff" stroke="#254b63" stroke-width="2"/><circle cy="-3" r="3" fill="#254b63"/><path d="M0 1v6m-4-3h8" stroke="#254b63" stroke-width="2" stroke-linecap="round"/></g>
+        </svg>
+      </div>
+      <div class="climb-caption"><strong id="climb-title">Your first step is enough.</strong><p id="climb-description">Tap a habit once. Watch the trail move.</p></div>
+    </section>
+    <section class="quick" aria-labelledby="habits-heading">
+      <h2 id="habits-heading">A few seconds to check in</h2>
+      <p class="muted small">Tap anywhere on a row. Tap again to undo.</p>
+      <ul class="habits" id="habits"></ul>
+      <div class="feedback" role="status" aria-live="polite"><p id="habit-feedback">Choose one small step to begin.</p><button class="text-button" id="undo" hidden>Undo</button></div>
+      <p class="muted small" id="completion-note">Today’s climb resets each day. Your savings stay put.</p>
+    </section>
+  </div>
+  <section class="section" aria-labelledby="money-heading">
+    <h2 id="money-heading">Give your budget somewhere to go</h2>
+    <p class="muted small">Sample dollars only. Checking a habit never changes a balance.</p>
+    <div class="money-grid">
+      <div>
+        <h3>Weekend away</h3>
+        <div class="amount"><span id="saved-amount">$1,200</span> <span>of $3,000 saved</span></div>
+        <progress id="savings-progress" max="300000" value="120000" aria-label="Weekend away savings"></progress>
+        <div class="budget-row small"><span id="savings-remaining">$1,800 to the summit</span><button class="text-button" id="view-savings">See the savings climb</button></div>
+        <div class="budget-row"><span>Fun money budget</span><strong>$200</strong></div>
+        <div class="budget-row small"><span>Spent in this sample month</span><span>$60</span></div>
+        <div class="budget-row small"><span>Moved to savings</span><span id="allocated">$0</span></div>
+        <div class="budget-row"><strong>Available to move</strong><strong id="budget-remaining">$140</strong></div>
+      </div>
+      <form class="transfer" id="transfer" novalidate>
+        <h3>Small moves add up</h3>
+        <label for="transfer-amount">Move sample fun money into savings</label>
+        <div class="input-row"><input id="transfer-amount" type="number" min="0.01" step="0.01" value="25" inputmode="decimal" aria-describedby="transfer-error"><button class="primary" type="submit">Move to savings</button></div>
+        <p class="error" id="transfer-error" role="alert"></p>
+        <p class="small muted" id="money-feedback" role="status">Try $25. The budget remainder goes down by $25, and savings go up by $25.</p>
+        <button type="button" class="text-button" id="undo-transfer" hidden>Undo last move</button>
+      </form>
+    </div>
+  </section>
+  <section class="section" aria-labelledby="reminder-heading">
+    <h2 id="reminder-heading">A nudge, then back to your evening</h2>
+    <p class="muted small">Reminder design preview. This demo does not schedule or send notifications.</p>
+    <div class="reminder-grid">
+      <div>
+        <div class="reminder-setting"><label for="reminder-time">Daily check-in</label><input id="reminder-time" type="time" value="22:00"><span class="small">America/Chicago</span></div>
+        <label class="toggle"><input type="checkbox" id="reminder-enabled" checked>One gentle reminder when something remains</label>
+        <p class="small muted">Quiet when you’re done. No repeat nags. Your phone controls sound and vibration.</p>
+        <button class="secondary" id="preview-reminder">Preview tonight’s reminder</button>
+        <p class="small muted" id="reminder-status" role="status">Preview time: 10:00 PM Central.</p>
+      </div>
+      <div class="notification" id="notification" hidden>
+        <div class="small">My Trackers <span id="notification-time"></span><span> — preview only</span></div>
+        <p><strong>A small step before you call it a day?</strong></p>
+        <p id="notification-copy"></p>
+        <button class="secondary" id="open-checkin">Open quick check-in</button>
+      </div>
+    </div>
+  </section>
+  <section class="section" aria-labelledby="alternatives-heading">
+    <h2 id="alternatives-heading">Other ways progress could feel</h2>
+    <p class="muted small">The mountain is the working concept above. These are two alternatives to compare in the morning.</p>
+    <div class="alternatives">
+      <div class="alternative"><div class="mini" aria-hidden="true">⛰</div><div><h3>Climb a trail</h3><p class="small">A visible next step. Each tap moves your climber toward today’s summit.</p></div></div>
+      <div class="alternative"><div class="mini" aria-hidden="true">🌱</div><div><h3>Grow a little garden</h3><p class="small">Completed habits add to a collection over time. Softer, with less focus on a finish line.</p></div></div>
+      <div class="alternative"><div class="mini"><span class="ring" aria-hidden="true"></span></div><div><h3>Keep it simple</h3><p class="small">A clear progress ring and dollars remaining. Fast to scan, with less scenery.</p></div></div>
+    </div>
+  </section>
+  <footer class="end">Experimental concept for My Trackers. This browser saves demo progress separately from your trackers. <a href="../index.html">Back to My Trackers</a></footer>
+</main>
+<script>
+(() => {
+  'use strict';
+  const KEY = 'trackers:summit-prototype:v1';
+  const HABITS = [{ id:'move', name:'Move for 10 minutes', hint:'A walk counts.' }, { id:'read', name:'Read a few pages', hint:'A little is enough.' }, { id:'practice', name:'Practice Spanish', hint:'One short lesson.' }, { id:'reset', name:'Evening reset', hint:'Make tomorrow a little easier.' }];
+  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+  const today = () => new Intl.DateTimeFormat('en-CA', { timeZone:'America/Chicago', year:'numeric', month:'2-digit', day:'2-digit' }).format(new Date());
+  const fresh = () => ({ day:today(), done:{}, transferred:0, time:'22:00', enabled:true, previewDay:'' });
+  let state = fresh(), mode = 'daily', lastHabit = null, lastTransfer = 0;
+  try {
+    const stored = JSON.parse(localStorage.getItem(KEY));
+    if (stored && typeof stored === 'object') {
+      if (stored.day === today()) for (const h of HABITS) state.done[h.id] = stored.done?.[h.id] === true;
+      if (Number.isSafeInteger(stored.transferred) && stored.transferred >= 0 && stored.transferred <= 14000) state.transferred = stored.transferred;
+      if (/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(stored.time)) state.time = stored.time;
+      state.enabled = stored.enabled !== false;
+      state.previewDay = typeof stored.previewDay === 'string' ? stored.previewDay : '';
+    }
+  } catch (e) { /* A missing or malformed demo save starts fresh. */ }
+  const el = (id) => document.getElementById(id);
+  const money = (cents) => new Intl.NumberFormat('en-US', { style:'currency', currency:'USD', maximumFractionDigits:cents % 100 ? 2 : 0 }).format(cents / 100);
+  const count = () => HABITS.filter((h) => state.done[h.id]).length;
+  const saved = () => 120000 + state.transferred;
+  const timeLabel = () => { const [h,m] = state.time.split(':').map(Number); return `${h % 12 || 12}:${String(m).padStart(2,'0')} ${h < 12 ? 'AM' : 'PM'}`; };
+  function persist() {
+    try { localStorage.setItem(KEY, JSON.stringify(state)); }
+    catch (e) { el('completion-note').textContent = 'Demo saving is unavailable in this browser. You can still try everything on this page.'; }
+  }
+  function rollover() {
+    if (state.day !== today()) {
+      state.day = today(); state.done = {}; lastHabit = null;
+      el('habit-feedback').textContent = 'A fresh trail for today. Choose one small step.';
+      el('notification').hidden = true;
+      el('reminder-status').textContent = state.enabled ? `Preview time: ${timeLabel()} Central.` : 'Reminders off in this preview.';
+      persist(); render();
+    }
+  }
+  el('habits').innerHTML = HABITS.map((h) => `<li><button class="habit" data-habit="${esc(h.id)}" aria-pressed="false"><span class="check" aria-hidden="true"></span><span class="habit-copy">${esc(h.name)}<small>${esc(h.hint)}</small></span><span class="habit-state">Done</span></button></li>`).join('');
+  function render() {
+    const done = count();
+    for (const h of HABITS) {
+      const button = document.querySelector(`[data-habit="${h.id}"]`);
+      button.setAttribute('aria-pressed', String(!!state.done[h.id]));
+      button.querySelector('.check').textContent = state.done[h.id] ? '✓' : '';
+      button.querySelector('.habit-state').textContent = state.done[h.id] ? 'Done ✓' : 'Mark done';
+    }
+    el('daily-tab-count').textContent = `${done} of ${HABITS.length} steps`;
+    el('saving-tab-count').textContent = `${Math.round(saved() / 3000)}% of the way`;
+    el('daily-mode').setAttribute('aria-pressed', String(mode === 'daily'));
+    el('saving-mode').setAttribute('aria-pressed', String(mode === 'saving'));
+    const fraction = mode === 'daily' ? done / HABITS.length : saved() / 300000;
+    const route = el('route'); const length = route.getTotalLength(); const point = route.getPointAtLength(length * fraction);
+    el('route-progress').style.strokeDasharray = `${length * fraction} ${length}`;
+    el('climber').setAttribute('transform', `translate(${point.x},${point.y})`);
+    el('scene-label').textContent = mode === 'daily' ? 'Today’s trail' : 'Weekend away';
+    el('scene-amount').textContent = mode === 'daily' ? `${done} of ${HABITS.length} steps` : `${money(saved())} saved`;
+    el('mountain-title').textContent = mode === 'daily' ? `Daily climb: ${done} of ${HABITS.length} habits done` : `Savings climb: ${money(saved())} of $3,000 saved`;
+    el('mountain-desc').textContent = mode === 'daily' ? 'Each completed habit advances the daily climber. Savings do not change.' : 'Only sample money moved into savings advances this climber.';
+    el('climb-title').textContent = mode === 'saving' ? `${money(300000 - saved())} to your savings summit.` : done === HABITS.length ? 'Today’s summit. You showed up.' : done ? 'One step closer.' : 'Your first step is enough.';
+    el('climb-description').textContent = mode === 'saving' ? 'A separate trail, grounded in dollars saved.' : done === HABITS.length ? 'All checked off. Tonight’s reminder would stay quiet.' : 'Tap a habit once. Watch the trail move.';
+    el('saved-amount').textContent = money(saved());
+    el('savings-progress').value = saved();
+    el('savings-remaining').textContent = `${money(300000 - saved())} to the summit`;
+    el('allocated').textContent = money(state.transferred);
+    el('budget-remaining').textContent = money(14000 - state.transferred);
+    el('transfer').querySelector('button[type=submit]').disabled = state.transferred === 14000;
+    el('reminder-time').value = state.time;
+    el('reminder-enabled').checked = state.enabled;
+    el('undo').hidden = !lastHabit;
+    el('undo-transfer').hidden = !lastTransfer;
+  }
+  el('habits').addEventListener('click', (event) => {
+    const button = event.target.closest('[data-habit]'); if (!button) return;
+    rollover(); const id = button.dataset.habit;
+    lastHabit = { id, previous:!!state.done[id] }; state.done[id] = !state.done[id];
+    mode = 'daily'; el('habit-feedback').textContent = count() === HABITS.length ? 'All done for today. Enjoy your evening.' : state.done[id] ? 'Marked done. A little higher.' : 'Unmarked. You can check it off whenever you’re ready.';
+    persist(); render();
+  });
+  el('undo').addEventListener('click', () => { if (!lastHabit) return; state.done[lastHabit.id] = lastHabit.previous; lastHabit = null; el('habit-feedback').textContent = 'Last check-in undone.'; persist(); render(); });
+  el('daily-mode').addEventListener('click', () => { rollover(); mode = 'daily'; render(); });
+  el('saving-mode').addEventListener('click', () => { mode = 'saving'; render(); });
+  el('view-savings').addEventListener('click', () => { mode = 'saving'; render(); el('saving-mode').scrollIntoView({ block:'center' }); el('saving-mode').focus({ preventScroll:true }); });
+  el('transfer').addEventListener('submit', (event) => {
+    event.preventDefault(); const raw = Number(el('transfer-amount').value); const cents = Math.round(raw * 100);
+    if (!Number.isFinite(raw) || !Number.isSafeInteger(cents) || cents <= 0 || Math.abs(raw * 100 - cents) > .00001 || cents > 14000 - state.transferred) {
+      el('transfer-error').textContent = `Enter an amount from $0.01 to ${money(14000 - state.transferred)}, with no more than two decimal places.`; return;
+    }
+    state.transferred += cents; lastTransfer = cents; mode = 'saving';
+    el('transfer-error').textContent = ''; el('money-feedback').textContent = `${money(cents)} moved in this demo. Savings are now ${money(saved())}.`;
+    persist(); render();
+  });
+  el('undo-transfer').addEventListener('click', () => { if (!lastTransfer) return; state.transferred -= lastTransfer; lastTransfer = 0; el('money-feedback').textContent = 'Last sample move undone.'; el('transfer-error').textContent = ''; persist(); render(); });
+  el('reminder-time').addEventListener('change', () => { if (!/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(el('reminder-time').value)) { el('reminder-time').value = state.time; el('reminder-status').textContent = `Time kept at ${timeLabel()} Central. Choose a valid time to change it.`; return; } state.time = el('reminder-time').value; el('reminder-status').textContent = `Preview time: ${timeLabel()} Central.`; persist(); });
+  el('reminder-enabled').addEventListener('change', () => { state.enabled = el('reminder-enabled').checked; el('notification').hidden = true; el('reminder-status').textContent = state.enabled ? `Preview time: ${timeLabel()} Central.` : 'Reminders off in this preview.'; persist(); });
+  el('preview-reminder').addEventListener('click', () => {
+    rollover(); el('notification').hidden = true;
+    if (!state.enabled) { el('reminder-status').textContent = 'Reminders are off. Nothing would be sent.'; return; }
+    if (count() === HABITS.length) { el('reminder-status').textContent = 'All done. A real reminder would stay quiet tonight.'; return; }
+    if (state.previewDay === today()) { el('reminder-status').textContent = 'Already nudged today in this demo. No second reminder.'; return; }
+    state.previewDay = today(); el('notification-time').textContent = timeLabel();
+    el('notification-copy').textContent = `${HABITS.length - count()} small ${HABITS.length - count() === 1 ? 'step remains' : 'steps remain'}. Tap to check in, then get back to your evening.`;
+    el('notification').hidden = false; el('reminder-status').textContent = 'Preview shown. No notification was sent.'; persist();
+  });
+  el('open-checkin').addEventListener('click', () => { el('notification').hidden = true; const first = HABITS.find((h) => !state.done[h.id]); if (first) { const button = document.querySelector(`[data-habit="${first.id}"]`); button.scrollIntoView({ block:'center' }); button.focus({ preventScroll:true }); } });
+  el('reset').addEventListener('click', () => { state = fresh(); mode = 'daily'; lastHabit = null; lastTransfer = 0; el('habit-feedback').textContent = 'Demo reset. Choose one small step.'; el('money-feedback').textContent = 'Try $25. The budget remainder goes down by $25, and savings go up by $25.'; el('transfer-error').textContent = ''; el('transfer-amount').value = '25'; el('notification').hidden = true; el('reminder-status').textContent = 'Preview time: 10:00 PM Central.'; persist(); render(); });
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') rollover(); });
+  setInterval(rollover, 60000);
+  render(); el('reminder-status').textContent = `Preview time: ${timeLabel()} Central.`;
+})();
+</script>
+</body>
+</html>

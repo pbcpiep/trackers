@@ -1,0 +1,90 @@
+// The standalone prototype must keep habit progress, sample money and real data separate.
+const path = require('path');
+const { pathToFileURL } = require('url');
+const { launch, ROOT, OUT, check } = require('./helpers');
+
+(async () => {
+  const browser = await launch();
+  try {
+    const p = await browser.newPage({ viewport: { width: 390, height: 844 } });
+    const errors = []; const external = [];
+    p.on('pageerror', (e) => errors.push(e.message));
+    p.on('request', (r) => { if (/^https?:/.test(r.url())) external.push(r.url()); });
+    await p.goto(pathToFileURL(path.join(ROOT, 'prototypes', 'summit.html')).href);
+    await p.evaluate(() => localStorage.setItem('trackers:v1', '{"sentinel":"real tracker data"}'));
+    const realData = await p.evaluate(() => localStorage.getItem('trackers:v1'));
+    const fits = async () => p.evaluate(() => document.documentElement.scrollWidth <= innerWidth);
+    check(await fits(), 'Summit prototype fits 390px without sideways scrolling');
+    check(await p.inputValue('#reminder-time') === '22:00', '10 PM is the editable preview default');
+    const start = await p.getAttribute('#climber', 'transform');
+    await p.locator('[data-habit=move]').focus(); await p.keyboard.press('Space');
+    check(await p.getAttribute('[data-habit=move]', 'aria-pressed') === 'true', 'one keyboard action checks off a habit');
+    check(await p.getAttribute('#climber', 'transform') !== start, 'habit check-off advances the daily climber');
+    check(await p.locator('[data-habit=move]').evaluate((el) => el === document.activeElement), 'check-off keeps keyboard focus on the same habit');
+    check(await p.innerText('#saved-amount') === '$1,200', 'habit check-off never changes savings');
+    await p.click('#undo');
+    check(await p.getAttribute('[data-habit=move]', 'aria-pressed') === 'false' && await p.getAttribute('#climber', 'transform') === start, 'undo restores the prior habit and climb');
+
+    await p.fill('#transfer-amount', '25'); await p.click('#transfer button[type=submit]');
+    check(await p.innerText('#saved-amount') === '$1,225' && await p.innerText('#budget-remaining') === '$115', 'sample savings move conserves dollars between budget and savings');
+    check(await p.innerText('#daily-tab-count') === '0 of 4 steps', 'sample money does not complete habits');
+    check(await p.getAttribute('#saving-mode', 'aria-pressed') === 'true', 'sample savings move opens the separate savings climb');
+    await p.fill('#transfer-amount', '116'); await p.click('#transfer button[type=submit]');
+    check((await p.innerText('#transfer-error')).includes('$115') && await p.innerText('#saved-amount') === '$1,225', 'cannot move more than the sample budget remainder');
+    await p.fill('#transfer-amount', '-10'); await p.click('#transfer button[type=submit]');
+    check(await p.innerText('#saved-amount') === '$1,225', 'negative money moves are rejected');
+    await p.click('#undo-transfer');
+    check(await p.innerText('#saved-amount') === '$1,200' && await p.innerText('#budget-remaining') === '$140', 'undo restores both sides of the money move');
+    await p.fill('#transfer-amount', '0.01'); await p.click('#transfer button[type=submit]');
+    check(await p.innerText('#saved-amount') === '$1,200.01' && await p.innerText('#budget-remaining') === '$139.99', 'money arithmetic preserves cents');
+    await p.reload();
+    check(await p.innerText('#saved-amount') === '$1,200.01', 'demo progress survives reload');
+    check(await p.evaluate(() => localStorage.getItem('trackers:v1')) === realData, 'prototype never changes real tracker storage');
+    await p.fill('#transfer-amount', '139.99'); await p.click('#transfer button[type=submit]');
+    check(await p.innerText('#budget-remaining') === '$0' && await p.isDisabled('#transfer button[type=submit]'), 'empty sample budget disables further moves');
+    await p.click('#undo-transfer');
+    check(!await p.isDisabled('#transfer button[type=submit]') && await p.innerText('#budget-remaining') === '$139.99', 'undo makes sample funds available again');
+
+    await p.click('#reset'); await p.click('#preview-reminder');
+    check(await p.isVisible('#notification') && (await p.innerText('#notification-copy')).includes('4 small steps'), 'incomplete day produces only an on-page reminder preview');
+    await p.click('#open-checkin');
+    check(await p.locator('[data-habit=move]').evaluate((el) => el === document.activeElement) && await p.getAttribute('[data-habit=move]', 'aria-pressed') === 'false', 'reminder opens the first unfinished habit without marking it done');
+    await p.click('#preview-reminder');
+    check(await p.isHidden('#notification') && (await p.innerText('#reminder-status')).includes('No second reminder'), 'preview does not nudge a second time on the same day');
+    for (const id of ['move', 'read', 'practice', 'reset']) await p.click(`[data-habit=${id}]`);
+    check((await p.innerText('#climb-title')).includes('summit'), 'all four habits reach the daily summit');
+    await p.click('#preview-reminder');
+    check(await p.isHidden('#notification') && (await p.innerText('#reminder-status')).includes('stay quiet'), 'completed day suppresses the reminder preview');
+    await p.uncheck('#reminder-enabled'); await p.click('#preview-reminder');
+    check((await p.innerText('#reminder-status')).includes('off'), 'turning reminders off suppresses the preview');
+    await p.fill('#reminder-time', '09:30'); await p.locator('#reminder-time').blur();
+    await p.reload();
+    check(await p.inputValue('#reminder-time') === '09:30' && !await p.isChecked('#reminder-enabled'), 'reminder preview preferences persist');
+    await p.fill('#reminder-time', ''); await p.locator('#reminder-time').blur();
+    check(await p.inputValue('#reminder-time') === '09:30', 'clearing reminder time restores the last valid value');
+
+    await p.evaluate(() => localStorage.setItem('trackers:summit-prototype:v1', JSON.stringify({ day:'2000-01-01', done:{move:true, read:true, practice:true, reset:true}, transferred:-100, time:'99:99' })));
+    await p.reload();
+    check(await p.innerText('#daily-tab-count') === '0 of 4 steps' && await p.innerText('#saved-amount') === '$1,200' && await p.inputValue('#reminder-time') === '22:00', 'past-day check-offs reset and invalid stored values are ignored');
+    await p.click('[data-habit=move]'); await p.click('[data-habit=read]');
+    await p.evaluate(() => window.scrollTo(0, 0));
+    await p.screenshot({ path:`${OUT}/summit-phone.png`, fullPage:true });
+    await p.setViewportSize({ width:1280, height:900 });
+    check(await fits(), 'Summit prototype also fits desktop');
+    await p.screenshot({ path:`${OUT}/summit-desktop.png`, fullPage:true });
+    check(external.length === 0, 'prototype makes no external requests or financial connections');
+    check(errors.length === 0, `no prototype page errors: ${errors.join('; ')}`);
+    const midnight = await browser.newPage({ viewport: { width:390, height:844 } });
+    await midnight.clock.install({ time:new Date('2026-10-28T04:59:00Z') });
+    await midnight.goto(pathToFileURL(path.join(ROOT, 'prototypes', 'summit.html')).href);
+    await midnight.click('#reset'); await midnight.click('#preview-reminder');
+    for (const id of ['move', 'read', 'practice', 'reset']) await midnight.click(`[data-habit=${id}]`);
+    await midnight.clock.fastForward(120000);
+    check(await midnight.innerText('#daily-tab-count') === '0 of 4 steps' && !(await midnight.innerText('#habit-feedback')).includes('All done'), 'midnight resets both daily progress and the completion message');
+    check(await midnight.isHidden('#notification'), 'yesterday’s preview is hidden after midnight');
+    await midnight.click('#preview-reminder');
+    check(await midnight.isVisible('#notification'), 'new local day can preview one fresh reminder');
+    await midnight.close();
+    console.log(`  Screenshots: ${OUT}/summit-phone.png and ${OUT}/summit-desktop.png`);
+  } finally { await browser.close(); }
+})().catch((e) => { console.error(e); process.exit(1); });
