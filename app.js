@@ -1098,7 +1098,8 @@
 
   const isShoppingFolder = (f) => /shop|list|grocer/i.test(f);
   const noteLines = (note) => String(note.body || '').split(/\r?\n/)
-    .map((l) => l.replace(/^\s*(?:[-*•◦▪]|\d+[.)]|\[[ xX]?\]|[☐☑✓✔])\s*/, '').trim())
+    .filter((l) => l.trim().toLowerCase() !== String(note.title || '').trim().toLowerCase())
+    .map((l) => l.replace(/^\s*(?:[-*•◦▪]|\d+\.(?!\d)|\d+\)|\[[ xX]?\]|[☐☑✓✔])\s*/, '').trim())
     .filter((l) => l && l.toLowerCase() !== String(note.title || '').trim().toLowerCase());
 
   function notesPage() {
