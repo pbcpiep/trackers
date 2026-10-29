@@ -42,9 +42,11 @@ The **New tracker** menu has more templates: Vocabulary, Reading List, Mood Jour
 **Home** gathers everything in one place:
 - the **Due & coming up** list, with one-tap **Done** and **Complete** buttons
 - today's habits
+- two separate mountain climbs: daily habit check-offs move the daily climber; your manually recorded savings balance moves the savings climber
 - a link to your Finances
 
 **How to use it:**
+- **Home climbs:** choose Daily climb or Savings climb. Check habits as usual; **Undo last habit change** reverses the latest Home check-off or uncheck. The daily climb starts fresh at midnight in your device’s local time, while your habit history stays intact. To track savings, choose **Savings climb → Set a savings goal**, enter a name, target and amount already saved, then update that balance when you save more. There are no sample balances, bank connections or money transfers. The goal saves and syncs with your trackers, and is included in backups. Savings can exceed the target; the climber stops at the summit. Habit check-offs never change savings. This does not activate a daily reminder.
 - **Every-N-days trackers** (chores, friends, haircuts): tap **Done** when you do the thing, and the next due date is calculated for you. Click an item's name to change how often it repeats, add notes, or log an earlier date.
 - **Tables:** edit cells inline, switch to the **Board** view, sort, search, and add columns (text, number, select, checkbox, date, rating, URL).
 - **One-tap links:** give any habit a link (edit the habit, then *Link*) and a ↗ button appears on Home and in the week view. Many apps open straight from their website link. If yours doesn't, tap **Open the app with an iPhone Shortcut**: it walks you through making a one-action Shortcut that opens the app itself.

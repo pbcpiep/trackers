@@ -133,6 +133,17 @@ a { color: inherit; }
 --------------------------------------------------------------------------- */
 .app { display: grid; grid-template-columns: 248px minmax(0, 1fr); min-height: 100vh; }
 .main { min-width: 0; }
+.home-climbs { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; align-items: start; }
+.home-climbs > .card { min-width: 0; }
+.climb-switch { display: flex; gap: 6px; margin-bottom: 16px; }
+.climb-switch .btn { flex: 1; min-height: 44px; white-space: normal; }
+.climb-switch [aria-pressed="true"] { background: var(--blue-bg); color: var(--blue-fg); border-color: var(--blue); }
+.climb-summary { overflow-wrap: anywhere; }
+.climb-summary h2 { margin: 0 0 6px; }
+.climb-summary p { margin: 0 0 6px; font-variant-numeric: tabular-nums; }
+.climb-scene { display: block; width: 100%; height: auto; border-radius: var(--radius); margin: 16px 0; }
+@media (max-width: 1000px) { .home-climbs { grid-template-columns: minmax(0, 1fr); } }
+#savings-error { color: var(--danger); }
 .page { max-width: 980px; margin: 0 auto; padding: 56px 48px 120px; }
 .page.wide { max-width: 1200px; }
 

@@ -333,6 +333,14 @@
   const safeColor = (c) => (COLORS.includes(c) ? c : 'gray');
   const isISODate = (d) => typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d);
   const clampInt = (n, lo, hi, dflt) => { const v = parseInt(n, 10); return Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : dflt; };
+  const validCents = (v) => Number.isSafeInteger(v) && v >= 0 && v <= 99999999999;
+  const money = (cents) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: cents % 100 ? 2 : 0 }).format(cents / 100);
+  function parseMoney(value) {
+    const text = String(value).trim();
+    if (!/^\d+(?:\.\d{1,2})?$/.test(text)) return null;
+    const cents = Math.round(Number(text) * 100);
+    return validCents(cents) ? cents : null;
+  }
 
   function normalize(data) {
     data.trackers = Array.isArray(data.trackers) ? data.trackers.filter((t) => t && typeof t === 'object') : [];
@@ -379,6 +387,9 @@
     const s = (data.settings = data.settings || {});
     s.digest = { enabled: true, ...(s.digest || {}) };
     s.financeUrl = s.financeUrl || '';
+    const goal = s.savingsGoal;
+    s.savingsGoal = goal && typeof goal.name === 'string' && goal.name.trim() && validCents(goal.targetCents) && goal.targetCents > 0 && validCents(goal.savedCents)
+      ? { name: goal.name.trim().slice(0, 80), targetCents: goal.targetCents, savedCents: goal.savedCents } : null;
     s.timezone = browserTimeZone(); // the digest uses this to know what "today" is
     return data;
   }
@@ -398,7 +409,7 @@
     if (changed && Cloud) Cloud.changed();
   }
 
-  const ui = { page: 'home', weekOffset: 0 };
+  const ui = { page: 'home', weekOffset: 0, climbMode: 'daily', habitUndo: null };
   const cur = () => state.trackers.find((t) => t.id === ui.page);
   const findTracker = (id) => state.trackers.find((t) => t.id === id);
 
@@ -538,6 +549,13 @@
     if (!t && ui.page !== 'notes') ui.page = 'home';
     renderSidebar();
     pageEl.innerHTML = ui.page === 'notes' ? notesPage() : !t ? homePage() : t.kind === 'habit' ? habitPage(t) : t.kind === 'recurring' ? recurringPage(t) : dbPage(t);
+    const trail = pageEl.querySelector('.climb-trail');
+    if (trail) {
+      const length = trail.getTotalLength();
+      const fraction = Number(trail.dataset.fraction);
+      const point = trail.getPointAtLength(length * fraction);
+      pageEl.querySelector('.climb-marker').setAttribute('transform', `translate(${point.x},${point.y})`);
+    }
     mobileTitleEl.textContent = t ? `${t.icon} ${t.name || 'Untitled'}` : ui.page === 'notes' ? '📝 Notes' : 'Home';
     document.title = t ? `${t.name || 'Untitled'} · My Trackers` : ui.page === 'notes' ? 'Notes · My Trackers' : 'My Trackers';
     bannerEl.innerHTML = storageOK ? '' : '<div class="banner">⚠️ Browser storage is unavailable, so changes won’t be saved. Use Export to keep a copy.</div>';
@@ -632,12 +650,14 @@
 
         ${dueCard()}
 
+        <div class="home-climbs">
+        ${climbCard(done, items.length)}
         <section class="card today">
           <div class="card-head">
             <h2>Today’s habits</h2>
             <span class="muted">${done} of ${items.length} done${items.length && done === items.length ? ' 🎉' : ''}</span>
           </div>
-          <div class="progress" role="progressbar" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100"><div style="width:${pct}%"></div></div>
+          <div class="progress" role="progressbar" aria-label="Today’s habits" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100"><div style="width:${pct}%"></div></div>
           ${items.length ? `<ul class="today-list">${items.map(({ t, hb }) => {
             const on = !!(t.log[hb.id] && t.log[hb.id][d]);
             const s = streak(t.log[hb.id]);
@@ -648,7 +668,9 @@
               ${s ? `<span class="streak">🔥 ${s}</span>` : ''}
             </button>${openLink(hb.link, hb.name)}</li>`;
           }).join('')}</ul>` : '<p class="muted empty">No habits yet. <button class="link" data-action="new-tracker">Create a habit tracker</button></p>'}
+          ${ui.habitUndo && ui.habitUndo.date === d ? '<button class="btn sm" data-action="undo-home-habit">Undo last habit change</button>' : ''}
         </section>
+        </div>
 
         <section>
           <h2 class="section-title">Your trackers</h2>
@@ -661,6 +683,60 @@
           </div>
         </section>
       </div>`;
+  }
+
+  function climbCard(done, total) {
+    const daily = ui.climbMode === 'daily';
+    const goal = state.settings.savingsGoal;
+    const fraction = daily ? (total ? done / total : 0) : goal ? Math.min(1, goal.savedCents / goal.targetCents) : 0;
+    const title = daily ? 'Daily climb' : goal ? goal.name : 'Savings climb';
+    const label = daily ? `${done} of ${total} habits done` : goal ? `${money(goal.savedCents)} of ${money(goal.targetCents)} saved` : 'Set a savings goal';
+    const caption = daily ? !total ? 'Add a habit to start your trail.' : done === total ? 'Today’s summit. You showed up.' : done ? 'One step closer.' : 'Your first step is enough.'
+      : !goal ? 'Give your savings a summit.' : goal.savedCents >= goal.targetCents ? 'Savings summit reached.' : `${money(goal.targetCents - goal.savedCents)} to your savings summit.`;
+    return `<section class="card climb-card" aria-label="Your two climbs">
+      <div class="climb-switch" role="group" aria-label="Choose a climb">
+        <button class="btn" data-action="climb-mode" data-val="daily" aria-pressed="${daily}">Daily climb</button>
+        <button class="btn" data-action="climb-mode" data-val="savings" aria-pressed="${!daily}">Savings climb</button>
+      </div>
+      <div class="climb-summary" role="status"><h2>${esc(title)}</h2><p>${esc(label)}</p><strong>${esc(caption)}</strong></div>
+      <svg class="climb-scene" viewBox="0 0 520 310" role="img" aria-label="${esc(`${title}: ${label}`)}">
+        <path fill="#dfedf4" d="M0 0h520v310H0z"/><circle cx="420" cy="62" r="28" fill="#f0c784"/>
+        <path d="M0 229 101 116 159 188 229 113 315 235 403 125 520 236V310H0Z" fill="#c3d9e3"/>
+        <path d="m80 296 215-246 201 246Z" fill="#a4c2d0"/><path d="m295 50 201 246H298l-49-96Z" fill="#668fa2"/>
+        <path d="m248 105 47-55 51 62-32-14-18 16-20-24Z" fill="#f8fcff"/>
+        <path d="M0 281q92-38 171-4t172 4 177-5v34H0Z" fill="#5d8f81"/><path d="M0 300q130-34 270-8t250-2v20H0Z" fill="#387565"/>
+        <path class="climb-trail" data-fraction="${fraction}" d="M102 272 C180 255 219 247 190 218 S224 182 258 169 S213 141 271 111 S280 82 295 64" fill="none" stroke="#e8f2f4" stroke-width="5" stroke-linecap="round"/>
+        <path d="M102 272 C180 255 219 247 190 218 S224 182 258 169 S213 141 271 111 S280 82 295 64" pathLength="100" stroke-dasharray="${fraction * 100} 100" fill="none" stroke="#f0b460" stroke-width="5" stroke-linecap="round"/>
+        <path d="M295 65V41m0 0 22 8-22 5" fill="#d57b43" stroke="#345366" stroke-width="2"/>
+        <g class="climb-marker"><circle r="13" fill="#fff" stroke="#254b63" stroke-width="2"/><circle cy="-3" r="3" fill="#254b63"/><path d="M0 1v6m-4-3h8" stroke="#254b63" stroke-width="2" stroke-linecap="round"/></g>
+      </svg>
+      <p class="muted small">${daily ? 'A fresh climb each day. Your history stays in your habit trackers.' : 'Manually recorded savings. Update the balance after saving money.'}</p>
+      ${!daily ? `<button class="btn" data-action="edit-savings">${goal ? 'Update savings goal' : 'Set a savings goal'}</button>` : ''}
+    </section>`;
+  }
+
+  function openSavingsGoal() {
+    const goal = state.settings.savingsGoal;
+    openModal({
+      title: goal ? 'Update savings goal' : 'Set a savings goal',
+      submitLabel: 'Save goal',
+      body: `<p class="muted">Record the amount already saved. This does not move money or connect to your bank.</p>
+        <label class="field"><span>Goal name</span><input name="goalName" maxlength="80" value="${esc(goal ? goal.name : '')}" autofocus></label>
+        <label class="field"><span>Target amount ($)</span><input name="targetAmount" inputmode="decimal" value="${goal ? (goal.targetCents / 100).toFixed(2) : ''}"></label>
+        <label class="field"><span>Amount saved ($)</span><input name="savedAmount" inputmode="decimal" value="${goal ? (goal.savedCents / 100).toFixed(2) : '0'}"></label>
+        <p id="savings-error" class="danger" role="alert"></p>`,
+      onSubmit: (fd) => {
+        const name = String(fd.get('goalName') || '').trim();
+        const targetCents = parseMoney(fd.get('targetAmount'));
+        const savedCents = parseMoney(fd.get('savedAmount'));
+        if (!name || name.length > 80 || targetCents === null || targetCents === 0 || savedCents === null) {
+          document.getElementById('savings-error').textContent = 'Enter a goal name, a target above $0 and a saved amount of $0 or more. Use up to two decimal places, up to $999,999,999.99.';
+          return false;
+        }
+        state.settings.savingsGoal = { name, targetCents, savedCents };
+        ui.climbMode = 'savings';
+      },
+    });
   }
 
   function trackerCard(t) {
@@ -1546,6 +1622,7 @@
       if (!data || !Array.isArray(data.trackers)) throw new Error('This file doesn’t look like a trackers backup.');
       if (!confirm(`Replace your current trackers with the ${plural(data.trackers.length, 'tracker', 'trackers')} in “${file.name}”?`)) return;
       state = normalize(data);
+      ui.habitUndo = null;
       save();
       location.hash = '#/';
       render();
@@ -1584,6 +1661,20 @@
     switch (action) {
       case 'open-sidebar': appEl.classList.add('sb-open'); break;
       case 'close-sidebar': appEl.classList.remove('sb-open'); break;
+      case 'climb-mode': ui.climbMode = el.dataset.val === 'savings' ? 'savings' : 'daily'; render(); break;
+      case 'edit-savings': openSavingsGoal(); break;
+      case 'undo-home-habit': {
+        const undo = ui.habitUndo;
+        const tracker = undo && findTracker(undo.tracker);
+        if (undo && undo.date === today() && tracker && tracker.kind === 'habit' && tracker.habits.some((h) => h.id === undo.habit)) {
+          const log = (tracker.log[undo.habit] = tracker.log[undo.habit] || {});
+          if (undo.previous) log[undo.date] = true; else delete log[undo.date];
+        }
+        ui.habitUndo = null;
+        commit();
+        if (undo) pageEl.querySelector(`[data-action="toggle-habit"][data-tracker="${undo.tracker}"][data-habit="${undo.habit}"]`)?.focus({ preventScroll: true });
+        break;
+      }
       case 'close-modal': closeModal(); break;
       case 'new-tracker': appEl.classList.remove('sb-open'); templatePicker(); break;
       case 'create-template': {
@@ -1630,7 +1721,16 @@
         render();
         break;
       }
-      case 'toggle-habit': if (habit) { toggleHabit(t, habit.id, el.dataset.date); commit(); } break;
+      case 'toggle-habit':
+        if (habit) {
+          if (ui.page === 'home') {
+            if (el.dataset.date !== today()) { render(); break; }
+            ui.habitUndo = { tracker: t.id, habit: habit.id, date: today(), previous: !!t.log[habit.id]?.[today()] };
+          } else ui.habitUndo = null;
+          toggleHabit(t, habit.id, el.dataset.date);
+          commit();
+        }
+        break;
       case 'edit-habit': if (habit) editHabit(t, habit); break;
       case 'move-habit': {
         const i = t.habits.indexOf(habit), j = i + Number(el.dataset.delta);
@@ -1930,9 +2030,13 @@
 
   // Refresh "today" when the date rolls over or the tab regains focus.
   let lastDay = today();
+  function refreshDay() {
+    if (today() !== lastDay) { lastDay = today(); ui.habitUndo = null; render(); }
+  }
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible' && today() !== lastDay) { lastDay = today(); render(); }
+    if (document.visibilityState === 'visible') refreshDay();
   });
+  setInterval(refreshDay, 60000);
 
   save(false);
   route();
@@ -1943,6 +2047,7 @@
       setState: (data) => {
         if (!data || !Array.isArray(data.trackers)) return;
         state = normalize(data);
+        ui.habitUndo = null;
         save(false);
         if (!cur()) ui.page = 'home';
         render();

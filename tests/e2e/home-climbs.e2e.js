@@ -1,0 +1,80 @@
+const { launch, fileUrl, check, OUT } = require('./helpers');
+
+(async () => {
+  const browser = await launch();
+  try {
+    const p = await browser.newPage({ viewport: { width: 390, height: 844 } });
+    const errors = [];
+    p.on('pageerror', (e) => errors.push(e.message));
+    await p.clock.install({ time: new Date('2026-10-28T12:00:00') });
+    await p.goto(fileUrl());
+    check(await p.locator('.home-climbs').count() === 1, 'Home includes the two climbs');
+    const habitCount = await p.locator('.today-item').count();
+    const initial = await p.locator('.climb-marker').getAttribute('transform');
+    const first = p.locator('.today-item').first();
+    await first.focus(); await p.keyboard.press('Space');
+    check(await first.getAttribute('aria-pressed') === 'true' && await first.evaluate((el) => el === document.activeElement), 'one keyboard check-off preserves focus');
+    check(await p.locator('.climb-marker').getAttribute('transform') !== initial, 'real habit check-off moves the daily climber');
+    await p.click('[data-action="undo-home-habit"]');
+    check(await first.getAttribute('aria-pressed') === 'false' && await p.locator('.climb-marker').getAttribute('transform') === initial, 'undo restores the habit and daily climber');
+    check(await first.evaluate((el) => el === document.activeElement), 'undo returns keyboard focus to the affected habit');
+    await first.click(); await first.click();
+    await p.click('[data-action="undo-home-habit"]');
+    check(await first.getAttribute('aria-pressed') === 'true', 'undo also restores an accidentally unchecked habit');
+    await first.click();
+    await p.click('[data-action="climb-mode"][data-val="savings"]');
+    check((await p.innerText('.home-climbs')).includes('Set a savings goal'), 'savings starts empty without sample money');
+    await p.click('[data-action="edit-savings"]');
+    await p.fill('[name="goalName"]', 'Weekend away');
+    await p.fill('[name="targetAmount"]', '3000');
+    await p.fill('[name="savedAmount"]', '1200.01');
+    await p.click('dialog button[type="submit"]');
+    check((await p.innerText('.climb-summary')).includes('$1,200.01') && (await p.innerText('.climb-summary')).includes('$3,000'), 'savings climb shows actual manually entered balances');
+    await p.evaluate(() => window.scrollTo(0, 0));
+    await p.screenshot({ path: `${OUT}/home-savings-phone.png`, fullPage: true });
+    const savingsMarker = await p.locator('.climb-marker').getAttribute('transform');
+    await first.click();
+    check(await p.locator('.climb-marker').getAttribute('transform') === savingsMarker, 'checking a habit leaves the savings climber unchanged');
+    check((await p.innerText('.today .card-head .muted')).startsWith('1 of'), 'savings mode still uses the existing daily habit list');
+    await p.reload();
+    await p.click('[data-action="climb-mode"][data-val="savings"]');
+    check((await p.innerText('.climb-summary')).includes('$1,200.01'), 'savings goal survives reload');
+    await p.click('[data-action="edit-savings"]');
+    for (const invalid of ['', '-1', '1.001', '1e3', '999999999999999999']) {
+      await p.fill('[name="savedAmount"]', invalid);
+      await p.click('dialog button[type="submit"]');
+      check(await p.locator('dialog').isVisible() && await p.locator('#savings-error').innerText() !== '', `invalid saved amount is rejected: ${invalid || 'empty'}`);
+    }
+    await p.fill('[name="savedAmount"]', '3100.50');
+    await p.fill('[name="targetAmount"]', '0');
+    await p.click('dialog button[type="submit"]');
+    check(await p.locator('dialog').isVisible(), 'zero target is rejected');
+    await p.fill('[name="targetAmount"]', '3000');
+    await p.click('dialog button[type="submit"]');
+    check((await p.innerText('.climb-summary')).includes('$3,100.50') && (await p.innerText('.climb-summary')).includes('summit'), 'savings above the target preserves the actual balance and reaches the summit');
+    const goal = await p.evaluate(() => JSON.parse(localStorage.getItem('trackers:v1')).settings.savingsGoal);
+    check(goal.savedCents === 310050 && goal.targetCents === 300000, 'money is stored as integer cents');
+    await p.click('[data-action="climb-mode"][data-val="daily"]');
+    for (let i = 1; i < habitCount; i++) await p.locator('.today-item').nth(i).click();
+    check((await p.innerText('.climb-summary')).includes('summit'), 'all real habits reach the daily summit');
+    await p.evaluate(() => window.scrollTo(0, 0));
+    await p.screenshot({ path: `${OUT}/home-climbs-phone.png`, fullPage: true });
+    await p.clock.fastForward(12 * 60 * 60 * 1000 + 60000);
+    check((await p.innerText('.today .card-head .muted')).startsWith('0 of') && await p.locator('[data-action="undo-home-habit"]').count() === 0, 'midnight resets daily progress and stale undo while the page stays open');
+    check(await p.evaluate(() => JSON.parse(localStorage.getItem('trackers:v1')).settings.savingsGoal.savedCents) === 310050, 'daily reset keeps savings');
+    check(await p.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'climbs fit 390px without horizontal scrolling');
+    await p.setViewportSize({ width: 1280, height: 900 });
+    await p.screenshot({ path: `${OUT}/home-climbs-desktop.png`, fullPage: true });
+    await p.click('[data-action="theme"]');
+    await p.screenshot({ path: `${OUT}/home-climbs-dark.png`, fullPage: true });
+    await p.evaluate(() => {
+      const s = JSON.parse(localStorage.getItem('trackers:v1'));
+      s.trackers = s.trackers.filter((t) => t.kind !== 'habit');
+      localStorage.setItem('trackers:v1', JSON.stringify(s));
+    });
+    await p.reload();
+    check((await p.innerText('.home-climbs')).includes('Add a habit') && !(await p.innerText('.climb-summary')).includes('summit'), 'no habits has an honest empty state');
+    check(errors.length === 0, `no page errors: ${errors.join('; ')}`);
+    console.log(`  Screenshots: ${OUT}/home-climbs-{phone,desktop,dark}.png`);
+  } finally { await browser.close(); }
+})().catch((e) => { console.error(e); process.exit(1); });

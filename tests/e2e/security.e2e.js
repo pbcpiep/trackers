@@ -4,6 +4,7 @@ const path = require('path');
 const { launch, fileUrl, check, OUT } = require('./helpers');
 
 const evil = {
+  settings: { savingsGoal: { name: '<img src=x onerror=window.PWNED=10>', targetCents: 10000, savedCents: 5000 } },
   trackers: [
     { id: 'x"><img src=x onerror=window.PWNED=1>', kind: 'recurring', name: '<b>Evil</b>', icon: '💀', items: [
       { id: 'i"><img src=x onerror=window.PWNED=2>', name: '<script>', every: '2"><img src=x onerror=window.PWNED=3>', unit: 'weeks',
@@ -27,6 +28,27 @@ const evil = {
   await fc.setFiles(file);
   await p.waitForSelector('.sb-item:has-text("Evil")');
   for (const name of ['Evil', 'T', 'H', 'Home']) { await p.click(`.sb-item:has-text("${name}")`); await p.waitForTimeout(150); }
+  await p.click('[data-action="climb-mode"][data-val="savings"]');
+  check(await p.locator('.climb-summary img, .climb-summary script').count() === 0 && (await p.innerText('.climb-summary')).includes('<img'), 'imported savings names are escaped');
+  await p.click('[data-action="edit-savings"]');
+  check(await p.inputValue('[name="goalName"]') === evil.settings.savingsGoal.name, 'savings name is safely escaped in the edit form');
+  await p.click('dialog [data-action="close-modal"]');
+  for (const goal of [
+    { name: 'Bad', targetCents: 0, savedCents: 100 },
+    { name: 'Bad', targetCents: 10000, savedCents: -1 },
+    { name: 'Bad', targetCents: 10000, savedCents: 1.5 },
+    { name: 'Bad', targetCents: 10000, savedCents: '5000' },
+    { name: 'Bad', targetCents: 1e30, savedCents: 0 },
+  ]) {
+    await p.evaluate((goal) => {
+      const s = JSON.parse(localStorage.getItem('trackers:v1'));
+      s.settings.savingsGoal = goal;
+      localStorage.setItem('trackers:v1', JSON.stringify(s));
+    }, goal);
+    await p.reload();
+    await p.click('[data-action="climb-mode"][data-val="savings"]');
+    check((await p.innerText('.climb-summary')).includes('Set a savings goal'), 'invalid imported money is discarded');
+  }
   await p.click('.sb-item:has-text("Evil")'); await p.waitForTimeout(150); await p.click('.rec-name'); await p.waitForTimeout(150);
   check(await p.evaluate(() => window.PWNED) === undefined, 'malicious import does not run script');
   check(await p.locator('.open-link[href^="javascript"]').count() === 0, 'javascript: habit link is not rendered');
