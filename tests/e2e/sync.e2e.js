@@ -88,6 +88,15 @@ const jwt = () => `${b64({ alg: 'HS256', typ: 'JWT' })}.${b64({ sub: USER.id, em
   await p.click('dialog .btn.primary');
   check(log.includes('INSERT') && db.data.trackers.length >= 8, 'first sign-in uploads this device\'s trackers');
 
+  await p.click('[data-action="climb-mode"][data-val="savings"]');
+  await p.click('[data-action="edit-savings"]');
+  await p.fill('[name="goalName"]', 'Weekend away');
+  await p.fill('[name="targetAmount"]', '3000');
+  await p.fill('[name="savedAmount"]', '1200.01');
+  await p.click('dialog button[type="submit"]');
+  await p.waitForFunction(() => window.Cloud.status === 'synced' && !JSON.parse(localStorage.getItem('trackers:sync')).dirty, null, { timeout: 5000 });
+  check(db.data.settings.savingsGoal.savedCents === 120001, 'savings goal auto-saves to the account in integer cents');
+
   await p.click('.sb-item:has-text("Chores")'); await p.locator('.rec-done').first().click();
   await p.waitForFunction(() => window.Cloud.status === 'synced' && !JSON.parse(localStorage.getItem('trackers:sync')).dirty, null, { timeout: 5000 });
   check(db.data.trackers.find((t) => t.name === 'Chores').items.some((i) => i.history.length), 'changes auto-save to the account');
@@ -106,6 +115,8 @@ const jwt = () => `${b64({ alg: 'HS256', typ: 'JWT' })}.${b64({ sub: USER.id, em
   const q = await device(browser, { width: 390, height: 844 });
   await signIn(q);
   check((await q.$$eval('.tracker-card .tc-name', (e) => e.map((x) => x.innerText))).includes('Gym (phone)'), 'a second device gets the account\'s trackers');
+  await q.click('[data-action="climb-mode"][data-val="savings"]');
+  check((await q.innerText('.climb-summary')).includes('$1,200.01'), 'a second device gets the saved savings goal');
   await q.goto(server.url + '#/notes'); await q.waitForSelector('.note-card');
   await q.locator('.note-card summary').first().click();
   await q.screenshot({ path: `${require('./helpers').OUT}/notes-phone.png`, fullPage: true });
